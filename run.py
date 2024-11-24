@@ -1,5 +1,7 @@
 import logging
 import typing
+import time
+import sys
 
 import click
 from decouple import config
@@ -95,7 +97,7 @@ fragment FragmentIssueInfo on Issue {
 }
 '''
 
-def qraphql_initial_query(num_issues=1, num_events=1):
+def qraphql_initial_query():
     return f'''{graphql_fragment_issue_info}
 {graphql_fragment_issue_items}
 query initial($owner: String!, $name: String!, $num_issues: Int!, $num_events: Int!) {{
@@ -126,7 +128,7 @@ query initial($owner: String!, $name: String!, $num_issues: Int!, $num_events: I
 }}
 '''
 
-def qraphql_ongoing_query(cursor, num_issues=1, num_events=1):
+def qraphql_ongoing_query(cursor):
     return f'''{graphql_fragment_issue_info}
 {graphql_fragment_issue_items}
 query ongoing($owner: String!, $name: String!, $num_issues: Int!, $num_events: Int!) {{
@@ -157,9 +159,10 @@ query ongoing($owner: String!, $name: String!, $num_issues: Int!, $num_events: I
 }}
 '''
 
-def graphql_follow_on(issue, num_issues=1, num_events=1):
+def graphql_follow_on(issue):
     return f'''
-      issue(number: {issue.issueId}) {{
+      issue{issue.issueId}: issue(number: {issue.issueId}) {{
+        number
         timelineItems(first: $num_events, after: "{issue.cursor}") {{
           totalCount
           edges {{
@@ -175,10 +178,10 @@ def graphql_follow_on(issue, num_issues=1, num_events=1):
       }}
 '''
 
-def graphql_fill_query(issues, num_issues=1, num_events=1):
-    issues_query = "\n".join([graphql_follow_on(i, num_issues=num_issues, num_events=num_events) for i in issues])
+def graphql_fill_query(issues):
+    issues_query = "\n".join([graphql_follow_on(i) for i in issues])
     return (graphql_fragment_issue_items + '''\
-            query fill($owner: String!, $name: String!, $num_issues: Int!, $num_events: Int!) {
+            query fill($owner: String!, $name: String!, $num_events: Int!) {
   repository(owner: $owner, name: $name) {
      ''' + issues_query + '''\
   }
@@ -189,23 +192,49 @@ class BaseAction:
     def __init__(self):
         pass
 
-class Initial:
-    def __init__(self):
-        pass
-    def query(self, num_issues=1, num_events=1):
-        return qraphql_initial_query(num_issues=2)
-
-class IssuePage:
+class IssuesPage:
     def __init__(self, cursor):
         self.cursor = cursor
-    def query(self, num_issues=1, num_events=1):
-        return qraphql_initial_query(num_issues=num_issues, num_events=num_events)
+    def query(self):
+        return qraphql_ongoing_query(self.cursor)
+    def process(self, data, r):
+        issues = data['data']['repository']['issues']
+        for issue in issues['nodes']:
+            num = issue['number']
+            r.add_issue(num)
+
+            timeline = issue['timelineItems']
+            events = map(lambda x: x['node'], timeline['edges'])
+            r.issues[num].add_events(events)
+            r.issues[num].complete(not timeline['pageInfo']['hasNextPage'])
+            r.issues[num].cursor = timeline['pageInfo']['endCursor']
+        if issues['pageInfo']['hasNextPage']:
+            return [IssuesPage(issues["pageInfo"]["endCursor"])]
+
+        return []
+
+class Initial(IssuesPage):
+    def __init__(self):
+        pass
+    def query(self):
+        return qraphql_initial_query()
 
 class IssuesEventsPage:
     def __init__(self, issues):
         self.issues = issues
-    def query(self, num_issues=1, num_events=1):
-        return graphql_fill_query(self.issues, num_issues=1, num_events=1)
+    def query(self):
+        return graphql_fill_query(self.issues)
+    def process(self, data, r):
+        issues = data['data']['repository']
+        print(f'not sure what todo here: {data}')
+        for k, issue in issues.items():
+            num = issue['number']
+            timeline = issue['timelineItems']
+            events = map(lambda x: x['node'], timeline['edges'])
+            r.issues[num].add_events(events)
+            r.issues[num].complete(not timeline['pageInfo']['hasNextPage'])
+            r.issues[num].cursor = timeline['pageInfo']['endCursor']
+        return []
 
 class Issue:
     def __init__(self, issueId):
@@ -254,30 +283,85 @@ def validate(resp):
         return False
     return True
 
+class Poster():
+    def __init__(self, *args, **kwargs):
+        self.remaining = -1
+        self.reset_at = 0
+        pass
+    def post(self, body):
+        if self.remaining == 0:
+            time.sleep(self.reset_at, time.time())
+
+        headers = {'Content-type': 'application/json', 'Authorization': f'Bearer {graphql_token}'}
+        resp = requests.post(graphql_endpoint, json=body, headers=headers)
+        self.remaining = int(resp.headers.get('x-ratelimit-remaining', -1))
+        self.reset_at = int(resp.headers.get('x-ratelimit-reset', time.time()))
+        print(f'rate limit: remaining: {self.remaining} reset: {self.reset_at}', file=sys.stderr)
+
+        return resp
+
 def fetch(repo: str):
     print(repo)
     r = Repo(repo)
 
-    query = qraphql_initial_query(num_issues=2)
-    next_query = Initial().query(num_issues=2)
-    if query != next_query:
-        print("not ok")
-        return
+    poster = Poster()
 
-    body = {
-            'query': query,
-            'variables': {
-                'owner': r.owner,
-                'name': r.name,
-                'num_issues': 2,
-                'num_events': 2
-            }
-    }
-    headers = {'Content-type': 'application/json', 'Authorization': f'Bearer {graphql_token}'}
-    resp = requests.post(graphql_endpoint, json=body, headers=headers)
-    print(query)
-    print(resp.status_code)
-    print(resp.text)
+    query = Initial()
+
+    crawling = True
+    tasks = [query]
+
+    count = 0
+    while(tasks and count<20):
+        t = tasks.pop()
+        query = t.query()
+        body = {
+                'query': query,
+                'variables': {
+                    'owner': r.owner,
+                    'name': r.name,
+                    'num_issues': 10,
+                    'num_events': 2
+                }
+        }
+        resp = poster.post(body)
+        count = count + 1
+        print(resp.status_code)
+
+        data = resp.json()
+        if not validate(data):
+            raise(Exception(f'failed to validate: {data["errors"]}'))
+        next_tasks = t.process(data, r)
+
+        print(r.complete_issues(), r.incomplete_issues())
+
+        if next_tasks:
+            tasks.extend(next_tasks)
+
+        for i in r.complete_issues():
+            print(f'complete {i}')
+
+        inc = r.incomplete_issues()
+        if len(inc) > 0 and (len(inc) > 10 or len(tasks)==0):
+            print(f'not complete {len(inc)}')
+            fill = IssuesEventsPage([r.issues[i] for i in inc])
+            tasks.append(fill)
+
+@cli.command(name='crawl')
+@click.argument('repo') # '-r', '--repo', 'repos', required=True, help='repo to crawl')
+def crawl(
+    repo
+):
+    repos = [repo]
+    for r in repos:
+        #try:
+           fetch(r)
+        #except Exception as e:
+        #   print(e)
+
+if __name__ == '__main__':
+    cli()
+
     '''
 {
   "data": {
@@ -310,41 +394,8 @@ def fetch(repo: str):
   }
 }
     '''
-    data = resp.json()
-    if not validate(data):
-        raise(Exception(f'failed to validate: {data["errors"]}'))
-
-    issues = data['data']['repository']['issues']
-    for issue in issues['nodes']:
-        num = issue['number']
-        print(num)
-        r.add_issue(num)
-
-        timeline = issue['timelineItems']
-        events = map(lambda x: x['node'], timeline['edges'])
-        r.issues[num].add_events(events)
-        r.issues[num].complete(not timeline['pageInfo']['hasNextPage'])
-        r.issues[num].cursor = timeline['pageInfo']['endCursor']
-        print(r.issues[num])
-
-    print(r.complete_issues(), r.incomplete_issues())
-    for i in r.complete_issues():
-        print(f'complete {i}')
-
-    inc = r.incomplete_issues()
-    if inc:
-        print(f'not complete {len(inc)}')
-        next_query = graphql_fill_query([r.issues[i] for i in inc])
-        check_query = IssuesEventsPage([r.issues[i] for i in inc]).query()
-        if next_query!=check_query:
-            print(next_query)
-        else:
-            print("was ok")
-
-    if issues['pageInfo']['hasNextPage']:
-        print(f'would requery, with cursor: {issues["pageInfo"]["endCursor"]}')
-        query = qraphql_ongoing_query(issues["pageInfo"]["endCursor"])
-        body = {
+    '''
+    body = {
             'query': query,
             'variables': {
                 'owner': r.owner,
@@ -352,25 +403,13 @@ def fetch(repo: str):
                 'num_issues': 2,
                 'num_events': 2
             }
-        }
-        headers = {'Content-type': 'application/json', 'Authorization': f'Bearer {graphql_token}'}
-        resp = requests.post(graphql_endpoint, json=body, headers=headers)
-        print(query)
-        print(resp.status_code)
-        print(resp.text)
-        # hasMoreIssues
+    }
+    resp = poster.post(body)
+    print(query)
+    print(resp.status_code)
+    print(resp.text)
+    data = resp.json()
+    if not validate(data):
+        raise(Exception(f'failed to validate: {data["errors"]}'))
 
-@cli.command(name='crawl')
-@click.argument('repo') # '-r', '--repo', 'repos', required=True, help='repo to crawl')
-def crawl(
-    repo
-):
-    repos = [repo]
-    for r in repos:
-        #try:
-           fetch(r)
-        #except Exception as e:
-        #   print(e)
-
-if __name__ == '__main__':
-    cli()
+    '''
