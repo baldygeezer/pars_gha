@@ -2,6 +2,8 @@ import logging
 import typing
 import time
 import sys
+import json
+from pathlib import Path
 
 import click
 from decouple import config
@@ -517,6 +519,9 @@ class Repo:
         if issueId not in self.issues:
             i = Issue(issueId)
             self.issues[issueId] = i
+        return self.issues[issueId]
+    def add_info(self, info):
+        self.info = info
     def incomplete_issues(self):
         return [i for i in self.issues.keys() if not self.issues[i].isComplete()]
     def complete_issues(self):
@@ -663,55 +668,3 @@ def crawl(
 
 if __name__ == '__main__':
     cli()
-
-    '''
-{
-  "data": {
-    "repository": {
-      "issues": {
-        "nodes": [
-          {
-            "id": "MDU6SXNzdWU4NjMwOTU=",
-            "databaseId": 863095,
-            "number": 1,
-            "author": {
-              "url": "https://github.com/ahankinson",
-              "login": "ahankinson",
-              "__typename": "User"
-            },
-            "closed": true,
-            "closedAt": "2011-08-28T13:06:10Z",
-            "state": "CLOSED",
-            "stateReason": "COMPLETED",
-            "url": "https://github.com/libvips/libvips/issues/1"
-          }
-        ],
-        "totalCount": 2346,
-        "pageInfo": {
-          "endCursor": "Y3Vyc29yOnYyOpK5MjAxMS0wNS0wN1QyMDoxMjoyMyswMTowMM4ADSt3",
-          "hasNextPage": true
-        }
-      }
-    }
-  }
-}
-    '''
-    '''
-    body = {
-            'query': query,
-            'variables': {
-                'owner': r.owner,
-                'name': r.name,
-                'num_issues': 2,
-                'num_events': 2
-            }
-    }
-    resp = poster.post(body)
-    print(query)
-    print(resp.status_code)
-    print(resp.text)
-    data = resp.json()
-    if not validate(data):
-        raise(Exception(f'failed to validate: {data["errors"]}'))
-
-    '''
