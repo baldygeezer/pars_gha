@@ -2,7 +2,7 @@ import os
 import prov
 from prov.model import ProvDocument
 
-from gha_ttl.lib.github_tools import QNameMinter
+from lib.github_tools import QNameMinter
 
 
 def setup_repo(repo):
