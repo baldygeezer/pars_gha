@@ -579,7 +579,7 @@ class Poster():
 
         return resp
 
-def fetch(repo: str):
+def crawl(repo: str):
     print(repo)
     r = Repo(repo)
 
@@ -590,7 +590,6 @@ def fetch(repo: str):
 
     crawling = True
     tasks = [queryIssues, queryPRs]
-    tasks = [queryPRs]
 
     count = 0
     while(tasks):
@@ -654,15 +653,30 @@ def fetch(repo: str):
             fill = PullRequestEventsPage([r.pull_requests[i] for i in inc])
             tasks.append(fill)
 
+def convert(repo):
+    pass
+
 @cli.command(name='crawl')
 @click.argument('repo') # '-r', '--repo', 'repos', required=True, help='repo to crawl')
-def crawl(
+def cmd_crawl(
     repo
 ):
     repos = [repo]
     for r in repos:
         #try:
-           fetch(r)
+           crawl(r)
+        #except Exception as e:
+        #   print(e)
+
+@cli.command(name='convert')
+@click.argument('repo') # '-r', '--repo', 'repos', required=True, help='repo to crawl')
+def cmd_convert(
+    repo
+):
+    repos = [repo]
+    for r in repos:
+        #try:
+           convert(r)
         #except Exception as e:
         #   print(e)
 
