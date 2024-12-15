@@ -69,7 +69,7 @@ class PullRequestsPage:
             p.complete(not timeline['pageInfo']['hasNextPage'])
             p.cursor = timeline['pageInfo']['endCursor']
         if prs['pageInfo']['hasNextPage']:
-            return [PullRquestsPage(pr["pageInfo"]["endCursor"])]
+            return [PullRequestsPage(prs["pageInfo"]["endCursor"])]
 
         return []
 
@@ -213,12 +213,12 @@ class Poster():
             return self.post(body)
         else:
             resp.raise_for_status()
-        print(f'rate limit: remaining: {self.remaining} reset: {self.reset_at}', file=sys.stderr)
+        logger.warn(f'rate limit: remaining: {self.remaining} reset: {self.reset_at}')
 
         return resp
 
 def crawl(repo: str):
-    print(repo)
+    logger.info("starting to crawl repo: "+repo)
     r = Repo(repo)
 
     poster = Poster()
@@ -245,35 +245,38 @@ def crawl(repo: str):
         resp = poster.post(body)
 
         count = count + 1
-        print(resp.status_code)
+        logger.error(f'post response had error code {resp.status_code}')
 
         data = resp.json()
         if not validate(data):
-            print(body)
+            logger.debug(f'post response body failed to validate:\n{body}')
             raise(Exception(f'failed to validate: {data["errors"]}'))
 
         next_tasks = t.process(data, r)
 
-        print(r.complete_issues(), r.incomplete_issues())
+        completed = ",".join([str(x) for x in r.complete_issues()])
+        logger.info(f'post found complete issues: { completed }')
+        incomplete = ",".join([str(x) for x in r.incomplete_issues()])
+        logger.info(f'post found incomplete issues: { incomplete }')
 
         if next_tasks:
             tasks.extend(next_tasks)
 
         for i in r.complete_issues():
-            print(f'complete {i}')
+            logger.debug(f'complete issue {i}')
             issue = r.issues[i]
             filename = f'{r.directory()}/issue{i:06d}.json'
-            print(f'filename {filename}')
+            logger.debug(f'writing to filename {filename}')
             with open(filename, 'w') as file:
                 dump = dict(info=issue.info, events=issue.events)
                 json.dump(dump, file)
             r.remove_issue(i)
 
         for i in r.complete_pull_requests():
-            print(f'complete pr {i}')
+            logger.debug(f'complete pull request {i}')
             pr = r.pull_requests[i]
             filename = f'{r.directory()}/pull_request{i:06d}.json'
-            print(f'filename {filename}')
+            logger.debug(f'filename {filename}')
             with open(filename, 'w') as file:
                 dump = dict(info=pr.info, events=pr.events)
                 json.dump(dump, file)
@@ -281,13 +284,13 @@ def crawl(repo: str):
 
         inc = r.incomplete_issues()
         if len(inc) > 0 and (len(inc) > 10 or len(tasks)==0):
-            print(f'not complete {len(inc)}')
+            logger.debug(f'not complete {len(inc)} issues')
             fill = IssuesEventsPage([r.issues[i] for i in inc])
             tasks.append(fill)
 
         inc = r.incomplete_pull_requests()
         if len(inc) > 0 and (len(inc) > 10 or len(tasks)==0):
-            print(f'not complete {len(inc)}')
+            logger.debug(f'not complete {len(inc)} pull_requests')
             fill = PullRequestEventsPage([r.pull_requests[i] for i in inc])
             tasks.append(fill)
 
