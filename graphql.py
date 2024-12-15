@@ -1,3 +1,7 @@
+from typing import List
+
+from model import Issue, PullRequest
+
 fragment_common_items = '''
 ... on AddedToProjectEvent
 { id createdAt actor { url login __typename } }
@@ -180,7 +184,17 @@ fragment FragmentPullRequestInfo on PullRequest {
 }
 '''
 
-def issues_initial_query():
+def issues_initial_query() -> str:
+    """
+    This constructs the first query for issues on a repository
+
+    Returns:
+        A graphql query string that expects
+            owner - the repo owner
+            name - the repo name
+            num_issues - number of issues to request
+            num_events - number of events per issue to request
+    """
     return f'''{fragment_issue_info}
 {fragment_issue_items}
 query initial_issues($owner: String!, $name: String!, $num_issues: Int!, $num_events: Int!) {{
@@ -211,7 +225,17 @@ query initial_issues($owner: String!, $name: String!, $num_issues: Int!, $num_ev
 }}
 '''
 
-def pull_requests_initial_query():
+def pull_requests_initial_query() -> str:
+    """
+    This constructs the first query for pull requests on a repository
+
+    Returns:
+        A graphql query string that expects
+            owner - the repo owner
+            name - the repo name
+            num_issues - number of pull requests to request
+            num_events - number of events per pull requests to request
+    """
     return f'''{fragment_pull_request_info}
 {fragment_pull_request_items}
 query initial_pull_requests($owner: String!, $name: String!, $num_issues: Int!, $num_events: Int!) {{
@@ -242,7 +266,20 @@ query initial_pull_requests($owner: String!, $name: String!, $num_issues: Int!, 
 }}
 '''
 
-def pull_requests_ongoing_query(cursor):
+def pull_requests_ongoing_query(cursor: str) -> str:
+    """
+    This constructs the follow on query for pull requests on a repository
+
+    Args:
+        cursor (str): the cursor to use
+
+    Returns:
+        A graphql query string that expects
+            owner - the repo owner
+            name - the repo name
+            num_issues - number of pull requests to request
+            num_events - number of events per pull requests to request
+    """
     return f'''{fragment_pull_request_info}
 {fragment_pull_request_items}
 query ongoing($owner: String!, $name: String!, $num_issues: Int!, $num_events: Int!) {{
@@ -274,7 +311,20 @@ query ongoing($owner: String!, $name: String!, $num_issues: Int!, $num_events: I
 '''
 
 
-def issues_ongoing_query(cursor):
+def issues_ongoing_query(cursor: str) -> str:
+    """
+    This constructs the follow on query for issues on a repository
+
+    Args:
+        cursor (str): the cursor to use
+
+    Returns:
+        A graphql query string that expects
+            owner - the repo owner
+            name - the repo name
+            num_issues - number of issues to request
+            num_events - number of events per issues to request
+    """
     return f'''{fragment_issue_info}
 {fragment_issue_items}
 query ongoing($owner: String!, $name: String!, $num_issues: Int!, $num_events: Int!) {{
@@ -305,7 +355,19 @@ query ongoing($owner: String!, $name: String!, $num_issues: Int!, $num_events: I
 }}
 '''
 
-def issues_follow_on(issue):
+def issues_follow_on(issue: Issue) -> str:
+    """
+    This constructs a query for events on an issue using a cursor as the starting point.
+    It the form issue1234 is generated in the output
+
+    Args:
+        issue (Issue): the issue to find events for
+
+    Returns:
+        A graphql query str that expects
+            num_issues - number of issues to request
+            num_events - number of events per issues to request
+    """
     return f'''
       issue{issue.issueId}: issue(number: {issue.issueId}) {{
         number
@@ -324,15 +386,27 @@ def issues_follow_on(issue):
       }}
 '''
 
-def pull_requests_follow_on(pr):
+def pull_requests_follow_on(pr: PullRequest) -> str:
+    """
+    This constructs a query for events on a pull request using a cursor as the starting point.
+    It the form pull_request1234 is generated in the output
+
+    Args:
+        pr (PullRequest): the issue to find events for
+
+    Returns:
+        A graphql query string that expects
+            num_issues - number of issues to request
+            num_events - number of events per issues to request
+    """
     return f'''
-      pull_request{pr.issueId}: issue(number: {pr.issueId}) {{
+      pull_request{pr.issueId}: pullRequest(number: {pr.issueId}) {{
         number
         timelineItems(first: $num_events, after: "{pr.cursor}") {{
           totalCount
           edges {{
             node {{
-              ...FragmentPullRequestInfo
+              ...FragmentPRTimelineNode
             }}
           }}
           pageInfo {{
@@ -343,7 +417,19 @@ def pull_requests_follow_on(pr):
       }}
 '''
 
-def issues_fill_query(issues):
+def issues_fill_query(issues: List[Issue]) -> str:
+    """
+    This constructs a query for events on a number of issues.
+    Each issue is expected to have a cursor.
+    The final query will query each of the issues for more events
+
+    Args:
+        issues (List[Issue]): the issue to find events for
+
+    Returns:
+        A graphql query string that expects
+            num_events - number of events per issues to request
+    """
     issues_query = "\n".join([issues_follow_on(i) for i in issues])
     return (fragment_issue_items + '''\
             query fill($owner: String!, $name: String!, $num_events: Int!) {
@@ -353,7 +439,19 @@ def issues_fill_query(issues):
 }
 ''')
 
-def pull_request_fill_query(prs):
+def pull_requests_fill_query(prs: List[PullRequest]) -> str:
+    """
+    This constructs a query for events on a number of pull requests.
+    Each pull requests is expected to have a cursor.
+    The final query will query each of the pull requests for more events
+
+    Args:
+        prs (List[PullRequest]): the pull request to find events for
+
+    Returns:
+        A graphql query string that expects
+            num_events - number of events per pull request to request
+    """
     prs_query = "\n".join([pull_requests_follow_on(i) for i in prs])
     return (fragment_pull_request_items + '''\
             query fill($owner: String!, $name: String!, $num_events: Int!) {
