@@ -160,9 +160,11 @@ class Repo:
     def remove_pull_request(self, prId):
         self.pull_requests.pop(prId)
 
-    def directory(self):
+    def directory(self, base=None):
         d = self.repo_name.replace("/","_")
-        p = Path(d)
-        p.mkdir( exist_ok=True)
+        p = Path()
+        if base:
+            Path(base)
+        p = p / d
+        p.mkdir(exist_ok=True)
         return p.absolute()
-

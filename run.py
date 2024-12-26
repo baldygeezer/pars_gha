@@ -1,9 +1,10 @@
-import typing
+import itertools
+import logging
 import time
+import typing
 
 import click
 from decouple import config
-import logging
 
 import graphql
 
@@ -23,25 +24,45 @@ def cli():
 @cli.command(name='crawl')
 @click.option('-i', '--num_issues', 'num_issues', required=False, type=click.INT, default=10, help='Specify number of issues/prs per query')
 @click.option('-e', '--num_events', 'num_events', required=False, type=click.INT, default=250, help='Specify events per issues/prs query')
-@click.argument('repo') # '-r', '--repo', 'repos', required=True, help='repo to crawl')
+@click.argument('repo', nargs=-1)
+@click.option('-f', '--file', 'repos_file', required=False, type=click.File('r'), help='File with one GitHub repo per line in <user>/<repo_name> format.')
+@click.option('-d', '--directory', 'working_dir', required=False, type=click.Path(file_okay=False, dir_okay=True, readable=True), default='output', help='Directory to write output to')
 def cmd_crawl(
     repo,
     num_issues: int,
-    num_events: int
+    num_events: int,
+    repos_file: typing.Optional[click.File],
+    working_dir: typing.Optional[click.Path]
 ):
-    repos = [repo]
+    repos = []
+    if repos_file is not None:
+        repos = list(itertools.chain(repos, map(str.strip, repos_file)))
+    elif repo is not None:
+        repos = list(repo)
+
+    print(repos, working_dir)
     for r in repos:
+            print(r)
         #try:
-           crawl(r, graphql_endpoint, graphql_token, num_issues=num_issues, num_events=num_events)
+            crawl(r, graphql_endpoint, graphql_token, num_issues=num_issues, num_events=num_events, directory=working_dir)
         #except Exception as e:
         #   print(e)
 
 @cli.command(name='convert')
-@click.argument('repo') # '-r', '--repo', 'repos', required=True, help='repo to crawl')
+@click.argument('repo', nargs=-1)
+@click.option('-f', '--file', 'repos_file', required=False, type=click.File('r'), help='File with one GitHub repo per line in <user>/<repo_name> format.')
+@click.option('-d', '--directory', 'working_dir', required=False, type=click.Path(file_okay=False, dir_okay=True, readable=True), default='output', help='Directory to write output to')
 def cmd_convert(
-    repo
+    repo,
+    repos_file: typing.Optional[click.File],
+    working_dir: typing.Optional[click.Path]
 ):
-    repos = [repo]
+    repos = []
+    if repos_file is not None:
+        repos = list(itertools.chain(repos, map(str.strip, repos_file)))
+    elif repo is not None:
+        repos = list(repo)
+
     for r in repos:
         #try:
            convert(r)

@@ -1,8 +1,9 @@
 import time 
 import logging
+import os
+from pathlib import Path
 
 import requests
-from pathlib import Path
 import json
 
 from model import *
@@ -52,7 +53,10 @@ class Poster():
 
         return resp
 
-def crawl(repo: str, endpoint: str, token: str, num_issues=10, num_events=250):
+def crawl(repo: str, endpoint: str, token: str, num_issues=10, num_events=250, directory=None):
+    if not Path(directory).exists():
+        os.mkdir(directory)
+
     logger.info("starting to crawl repo: "+repo)
     start_time = time.time()
     r = Repo(repo)
@@ -110,7 +114,7 @@ def crawl(repo: str, endpoint: str, token: str, num_issues=10, num_events=250):
         for i in r.complete_issues():
             logger.debug(f'complete issue {i}')
             issue = r.issues[i]
-            filename = f'{r.directory()}/issue{i:06d}.json'
+            filename = f'{r.directory(base=directory)}/issue{i:06d}.json'
             logger.debug(f'writing to filename {filename}')
             with open(filename, 'w') as file:
                 dump = dict(info=issue.info, events=issue.events)
@@ -120,7 +124,7 @@ def crawl(repo: str, endpoint: str, token: str, num_issues=10, num_events=250):
         for i in r.complete_pull_requests():
             logger.debug(f'complete pull request {i}')
             pr = r.pull_requests[i]
-            filename = f'{r.directory()}/pull_request{i:06d}.json'
+            filename = f'{r.directory(base=directory)}/pull_request{i:06d}.json'
             logger.debug(f'filename {filename}')
             with open(filename, 'w') as file:
                 dump = dict(info=pr.info, events=pr.events)
