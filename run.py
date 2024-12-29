@@ -11,6 +11,7 @@ import graphql
 from model import *
 from crawler import crawl
 from converter import convert
+from git2prov import git2prov
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ def cli():
     logging.basicConfig(level=config('LOG_LEVEL', default='INFO'))
 
 @cli.command(name='crawl')
-@click.option('-i', '--num_issues', 'num_issues', required=False, type=click.INT, default=10, help='Specify number of issues/prs per query')
+@click.option('-i', '--num_issues', 'num_issues', required=False, type=click.INT, default=50, help='Specify number of issues/prs per query')
 @click.option('-e', '--num_events', 'num_events', required=False, type=click.INT, default=250, help='Specify events per issues/prs query')
 @click.argument('repo', nargs=-1)
 @click.option('-f', '--file', 'repos_file', required=False, type=click.File('r'), help='File with one GitHub repo per line in <user>/<repo_name> format.')
@@ -40,9 +41,7 @@ def cmd_crawl(
     elif repo is not None:
         repos = list(repo)
 
-    print(repos, working_dir)
     for r in repos:
-            print(r)
         #try:
             crawl(r, graphql_endpoint, graphql_token, num_issues=num_issues, num_events=num_events, directory=working_dir)
         #except Exception as e:
@@ -52,7 +51,30 @@ def cmd_crawl(
 @click.argument('repo', nargs=-1)
 @click.option('-f', '--file', 'repos_file', required=False, type=click.File('r'), help='File with one GitHub repo per line in <user>/<repo_name> format.')
 @click.option('-d', '--directory', 'working_dir', required=False, type=click.Path(file_okay=False, dir_okay=True, readable=True), default='output', help='Directory to write output to')
+@click.option('-n', '--provn', 'provn', required=False, is_flag=True, default=False, help='Whether to generate PROV-N records.')
 def cmd_convert(
+    repo,
+    repos_file: typing.Optional[click.File],
+    working_dir: typing.Optional[click.Path],
+    provn: bool
+):
+    repos = []
+    if repos_file is not None:
+        repos = list(itertools.chain(repos, map(str.strip, repos_file)))
+    elif repo is not None:
+        repos = list(repo)
+
+    for r in repos:
+        #try:
+           convert(r, directory=working_dir, provn=provn)
+        #except Exception as e:
+        #   print(e)
+
+@cli.command(name='git2prov')
+@click.argument('repo', nargs=-1)
+@click.option('-f', '--file', 'repos_file', required=False, type=click.File('r'), help='File with one GitHub repo per line in <user>/<repo_name> format.')
+@click.option('-d', '--directory', 'working_dir', required=False, type=click.Path(file_okay=False, dir_okay=True, readable=True), default='output', help='Directory to write output to')
+def cmd_git2prov(
     repo,
     repos_file: typing.Optional[click.File],
     working_dir: typing.Optional[click.Path]
@@ -65,7 +87,7 @@ def cmd_convert(
 
     for r in repos:
         #try:
-           convert(r)
+           git2prov(r, directory=working_dir)
         #except Exception as e:
         #   print(e)
 
