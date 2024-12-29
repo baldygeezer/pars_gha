@@ -1,71 +1,18 @@
 from typing import List
 
 from model import Issue, PullRequest
+from github import *
 
-fragment_common_items = '''
-... on AddedToProjectEvent
-{ id createdAt actor { url login __typename } }
-... on AssignedEvent
-{ id createdAt actor { url login __typename } user { url login __typename } }
-... on ClosedEvent
-{ id createdAt actor { url login __typename } stateReason }
-... on CommentDeletedEvent
-{ id createdAt actor { url login __typename } deletedCommentAuthor { url login __typename } }
-... on ConnectedEvent
-{ id createdAt actor { url login __typename } source { ... on UniformResourceLocatable { url } } subject { ... on UniformResourceLocatable { url } } }
-... on ConvertedNoteToIssueEvent
-{ id createdAt actor { url login __typename} }
-... on ConvertedToDiscussionEvent
-{ id createdAt actor { url login __typename} }
-... on CrossReferencedEvent
-{ id createdAt actor { url login __typename} referencedAt source { ... on UniformResourceLocatable { url } } target { ... on UniformResourceLocatable { url } } }
-... on DemilestonedEvent
-{ id createdAt actor { url login __typename} }
-... on DisconnectedEvent
-{ id createdAt actor { url login __typename} source { ... on UniformResourceLocatable { url } } subject { ... on UniformResourceLocatable { url } } }
-... on IssueComment
-{ id createdAt author { url login __typename} body includesCreatedEdit isMinimized lastEditedAt minimizedReason publishedAt pullRequest { url } }
-... on LabeledEvent
-{ id createdAt actor { url login __typename} label { name } }
-... on LockedEvent
-{ id createdAt actor { url login __typename} lockReason }
-... on MarkedAsDuplicateEvent
-{ id createdAt actor { url login __typename} canonical { __typename ... on Issue {url} ... on PullRequest {url}} duplicate { __typename ... on Issue {url} ... on PullRequest {url}} isCrossRepository }
-... on MentionedEvent
-{ id databaseId createdAt actor { url login __typename } }
-... on MilestonedEvent
-{ id createdAt actor { url login __typename } milestoneTitle }
-... on MovedColumnsInProjectEvent
-{ id createdAt actor { url login __typename } }
-... on PinnedEvent
-{ id createdAt actor { url login __typename } }
-... on ReferencedEvent
-{ id createdAt actor { url login __typename } commit { commitUrl oid } commitRepository { nameWithOwner} isCrossRepository isDirectReference }
-... on RemovedFromProjectEvent
-{ id createdAt actor { url login __typename } }
-... on RenamedTitleEvent
-{ id createdAt actor { url login __typename } currentTitle previousTitle}
-... on ReopenedEvent
-{ id createdAt actor { url login __typename } stateReason}
-... on SubscribedEvent
-{ id createdAt actor { url login __typename } }
-... on TransferredEvent
-{ id createdAt actor { url login __typename } issue { url } fromRepository { nameWithOwner } }
-... on UnassignedEvent
-{ id createdAt actor { url login __typename } assignee { __typename ... on User { url login __typename } } }
-... on UnlabeledEvent
-{ id createdAt actor { url login __typename } label { name } }
-... on UnlockedEvent
-{ id createdAt actor { url login __typename} }
-... on UnmarkedAsDuplicateEvent
-{ id createdAt actor { url login __typename} canonical { __typename ... on Issue {url} ... on PullRequest {url}} duplicate { __typename ... on Issue {url} ... on PullRequest {url}} isCrossRepository }
-... on UnpinnedEvent
-{ id createdAt actor { url login __typename } }
-... on UnsubscribedEvent
-{ id createdAt actor { url login __typename } }
-... on UserBlockedEvent
-{ id createdAt actor { url login __typename } subject { url login __typename } }
-'''
+fragment_common_items = "\n".join([x.fragment() for x in
+[ AddedToProjectEvent, AssignedEvent, ClosedEvent, CommentDeletedEvent,
+ConnectedEvent, ConvertedNoteToIssueEvent, ConvertedToDiscussionEvent,
+CrossReferencedEvent, DemilestonedEvent, DisconnectedEvent, IssueComment,
+LabeledEvent, LockedEvent, MarkedAsDuplicateEvent, MentionedEvent,
+MilestonedEvent, MovedColumnsInProjectEvent, PinnedEvent,
+ReferencedEvent, RemovedFromProjectEvent, RenamedTitleEvent,
+ReopenedEvent, SubscribedEvent, TransferredEvent, UnassignedEvent,
+UnlabeledEvent, UnlockedEvent, UnmarkedAsDuplicateEvent, UnpinnedEvent,
+UnsubscribedEvent, UserBlockedEvent]])
 
 fragment_issue_items = '''
 fragment FragmentTimelineNode on IssueTimelineItems {
@@ -76,68 +23,30 @@ fragment FragmentTimelineNode on IssueTimelineItems {
 }
 '''
 
+fragment_pull_request_specific_items = "\n".join([x.fragment() for x in [
+AddedToMergeQueueEvent, AutoMergeDisabledEvent,
+AutoMergeEnabledEvent, AutoRebaseEnabledEvent,
+AutoSquashEnabledEvent, AutomaticBaseChangeFailedEvent,
+AutomaticBaseChangeSucceededEvent, BaseRefChangedEvent,
+BaseRefDeletedEvent, BaseRefForcePushedEvent, ConvertToDraftEvent,
+DeployedEvent, DeploymentEnvironmentChangedEvent, HeadRefDeletedEvent,
+HeadRefForcePushedEvent, HeadRefRestoredEvent, MergedEvent,
+PullRequestCommit, PullRequestReview, PullRequestRevisionMarker,
+ReadyForReviewEvent, RemovedFromMergeQueueEvent, RemovedFromProjectEvent,
+ReviewDismissedEvent, ReviewRequestRemovedEvent, ReviewRequestedEvent]])
+
 fragment_pull_request_items = '''
 fragment FragmentPRTimelineNode on PullRequestTimelineItems {
               __typename
-              ... on UniformResourceLocatable { url }
+              ... on UniformResourceLocatable { url resourcePath }
               ... on Node { id }
 ''' + fragment_common_items + '''
-...  on AddedToMergeQueueEvent 
-{ id createdAt actor { url login __typename } enqueuer { url login __typename } }
-...  on AutoMergeDisabledEvent
-{ id createdAt actor { url login __typename } reason reasonCode }
-...  on AutoMergeEnabledEvent
-{ id createdAt actor { url login __typename } enabler { url login __typename } }
-...  on AutoRebaseEnabledEvent
-{ id createdAt actor { url login __typename } enabler { url login __typename } }
-...  on AutoSquashEnabledEvent
-{ id createdAt actor { url login __typename } enabler { url login __typename } }
-...  on AutomaticBaseChangeFailedEvent
-{ id createdAt actor { url login __typename } newBase oldBase }
-...  on AutomaticBaseChangeSucceededEvent
-{ id createdAt actor { url login __typename } newBase oldBase }
-...  on BaseRefChangedEvent
-{ id createdAt actor { url login __typename } currentRefName previousRefName }
-...  on BaseRefDeletedEvent
-{ id createdAt actor { url login __typename } baseRefName }
-...  on BaseRefForcePushedEvent
-{ id createdAt actor { url login __typename } afterCommit { commitUrl oid } beforeCommit { commitUrl oid } }
-...  on ConvertToDraftEvent
-{ id createdAt actor { url login __typename } }
-...  on DeployedEvent
-{ id createdAt actor { url login __typename } }
-...  on DeploymentEnvironmentChangedEvent
-{ id createdAt actor { url login __typename } }
-...  on HeadRefDeletedEvent
-{ id createdAt actor { url login __typename } }
-...  on HeadRefForcePushedEvent
-{ id createdAt actor { url login __typename } }
-...  on HeadRefRestoredEvent
-{ id createdAt actor { url login __typename } }
-...  on MergedEvent
-{ id createdAt actor { url login __typename } commit { commitUrl oid } }
-...  on PullRequestCommit
-{ id commit { commitUrl oid } }
-...  on PullRequestReview
-{ id createdAt author { url login __typename } body commit { commitUrl oid } }
-...  on PullRequestRevisionMarker
-{ createdAt }
-...  on ReadyForReviewEvent
-{ id createdAt actor { url login __typename } resourcePath}
-...  on RemovedFromMergeQueueEvent
-{ id createdAt actor { url login __typename } reason beforeCommit { commitUrl oid } }
-...  on RemovedFromProjectEvent
-{ id createdAt actor { url login __typename } }
-...  on ReviewDismissedEvent
-{ id createdAt actor { url login __typename } }
-...  on ReviewRequestRemovedEvent
-{ id createdAt actor { url login __typename } }
-...  on ReviewRequestedEvent
-{ id createdAt actor { url login __typename } }
+''' + fragment_pull_request_specific_items + '''
 }
 '''
 #...  on PullRequestCommitCommentThread
 #...  on PullRequestReviewThread
+
 
 fragment_issue_info = '''
 fragment FragmentIssueInfo on Issue {
@@ -501,154 +410,7 @@ def parse_repository(repository_data):
 def parse_event(event_data):
     """Parse a single event from the data."""
     event_type = event_data['__typename']
-
-    # Parse the common fields
-    id = event_data['id']
-    created_at = event_data['createdAt']
-    actor = parse_actor(event_data['actor'])
-
-    # Handle each event type
-    if event_type == "AddedToProjectEvent":
-        return AddedToProjectEvent(id=id, created_at=created_at, actor=actor)
-
-    elif event_type == "AssignedEvent":
-        user = parse_user(event_data['user'])
-        return AssignedEvent(id=id, created_at=created_at, actor=actor, user=user)
-
-    elif event_type == "ClosedEvent":
-        state_reason = event_data.get('stateReason')
-        return ClosedEvent(id=id, created_at=created_at, state_reason=state_reason, actor=actor)
-
-    elif event_type == "CommentDeletedEvent":
-        deleted_comment_author = parse_actor(event_data['deletedCommentAuthor'])
-        return CommentDeletedEvent(id=id, created_at=created_at, actor=actor, deleted_comment_author=deleted_comment_author)
-
-    elif event_type == "ConnectedEvent":
-        source = parse_uniform_resource_locatable(event_data['source'])
-        subject = parse_uniform_resource_locatable(event_data['subject'])
-        return ConnectedEvent(id=id, created_at=created_at, actor=actor, source=source, subject=subject)
-
-    elif event_type == "ConvertedNoteToIssueEvent":
-        return ConvertedNoteToIssueEvent(id=id, created_at=created_at, actor=actor)
-
-    elif event_type == "ConvertedToDiscussionEvent":
-        return ConvertedToDiscussionEvent(id=id, created_at=created_at, actor=actor)
-
-    elif event_type == "CrossReferencedEvent":
-        source = parse_uniform_resource_locatable(event_data['source'])
-        target = parse_uniform_resource_locatable(event_data['target'])
-        return CrossReferencedEvent(id=id, created_at=created_at, actor=actor, source=source, target=target)
-
-    elif event_type == "DemilestonedEvent":
-        return DemilestonedEvent(id=id, created_at=created_at, actor=actor)
-
-    elif event_type == "DisconnectedEvent":
-        source = parse_uniform_resource_locatable(event_data['source'])
-        subject = parse_uniform_resource_locatable(event_data['subject'])
-        return DisconnectedEvent(id=id, created_at=created_at, actor=actor, source=source, subject=subject)
-
-    elif event_type == "IssueComment":
-        author = parse_actor(event_data['author'])
-        body = event_data['body']
-        includes_created_edit = event_data['includesCreatedEdit']
-        is_minimized = event_data['isMinimized']
-        last_edited_at = event_data['lastEditedAt']
-        minimized_reason = event_data['minimizedReason']
-        published_at = event_data['publishedAt']
-        pull_request = parse_uniform_resource_locatable(event_data['pullRequest']) if 'pullRequest' in event_data else None
-        return IssueComment(
-            id=id, created_at=created_at, author=author, body=body,
-            includes_created_edit=includes_created_edit, is_minimized=is_minimized,
-            last_edited_at=last_edited_at, minimized_reason=minimized_reason, 
-            published_at=published_at, pull_request=pull_request
-        )
-
-    elif event_type == "LabeledEvent":
-        label = event_data['label']['name']
-        return LabeledEvent(id=id, created_at=created_at, actor=actor, label=label)
-
-    elif event_type == "LockedEvent":
-        lock_reason = event_data.get('lockReason')
-        return LockedEvent(id=id, created_at=created_at, actor=actor, lock_reason=lock_reason)
-
-    elif event_type == "MarkedAsDuplicateEvent":
-        canonical = event_data['canonical']
-        duplicate = event_data['duplicate']
-        is_cross_repository = event_data['isCrossRepository']
-        return MarkedAsDuplicateEvent(id=id, created_at=created_at, actor=actor,
-                                      canonical=canonical, duplicate=duplicate, is_cross_repository=is_cross_repository)
-
-    elif event_type == "MentionedEvent":
-        return MentionedEvent(id=id, created_at=created_at, actor=actor)
-
-    elif event_type == "MilestonedEvent":
-        milestone_title = event_data['milestoneTitle']
-        return MilestonedEvent(id=id, created_at=created_at, actor=actor, milestone_title=milestone_title)
-
-    elif event_type == "MovedColumnsInProjectEvent":
-        return MovedColumnsInProjectEvent(id=id, created_at=created_at, actor=actor)
-
-    elif event_type == "PinnedEvent":
-        return PinnedEvent(id=id, created_at=created_at, actor=actor)
-
-    elif event_type == "ReferencedEvent":
-        commit = parse_commit(event_data['commit'])
-        commit_repository = parse_repository(event_data['commitRepository'])
-        is_cross_repository = event_data.get('isCrossRepository', False)
-        is_direct_reference = event_data.get('isDirectReference', False)
-        return ReferencedEvent(
-            id=id, created_at=created_at, actor=actor,
-            commit=commit, commit_repository=commit_repository,
-            is_cross_repository=is_cross_repository,
-            is_direct_reference=is_direct_reference
-        )
-
-    elif event_type == "RemovedFromProjectEvent":
-        return RemovedFromProjectEvent(id=id, created_at=created_at, actor=actor)
-
-    elif event_type == "RenamedTitleEvent":
-        current_title = event_data['currentTitle']
-        previous_title = event_data['previousTitle']
-        return RenamedTitleEvent(id=id, created_at=created_at, actor=actor, current_title=current_title, previous_title=previous_title)
-
-    elif event_type == "ReopenedEvent":
-        state_reason = event_data.get('stateReason')
-        return ReopenedEvent(id=id, created_at=created_at, state_reason=state_reason, actor=actor)
-
-    elif event_type == "SubscribedEvent":
-        return SubscribedEvent(id=id, created_at=created_at, actor=actor)
-
-    elif event_type == "TransferredEvent":
-        issue = parse_uniform_resource_locatable(event_data['issue'])
-        from_repository = parse_repository(event_data['fromRepository'])
-        return TransferredEvent(id=id, created_at=created_at, actor=actor, issue=issue, from_repository=from_repository)
-
-    elif event_type == "UnassignedEvent":
-        assignee = parse_user(event_data['assignee'])
-        return UnassignedEvent(id=id, created_at=created_at, actor=actor, assignee=assignee)
-
-    elif event_type == "UnlabeledEvent":
-        label = event_data['label']['name']
-        return UnlabeledEvent(id=id, created_at=created_at, actor=actor, label=label)
-
-    elif event_type == "UnlockedEvent":
-        return UnlockedEvent(id=id, created_at=created_at, actor=actor)
-
-    elif event_type == "UnmarkedAsDuplicateEvent":
-        canonical = event_data['canonical']
-        duplicate = event_data['duplicate']
-        is_cross_repository = event_data['isCrossRepository']
-        return UnmarkedAsDuplicateEvent(id=id, created_at=created_at, actor=actor,
-                                        canonical=canonical, duplicate=duplicate, is_cross_repository=is_cross_repository)
-
-    elif event_type == "UnpinnedEvent":
-        return UnpinnedEvent(id=id, created_at=created_at, actor=actor)
-
-    elif event_type == "UnsubscribedEvent":
-        return UnsubscribedEvent(id=id, created_at=created_at, actor=actor)
-
-    elif event_type == "UserBlockedEvent":
-        subject = parse_actor(event_data['subject'])
-        return UserBlockedEvent(id=id, created_at=created_at, actor=actor, subject=subject)
-
-    return None  # Return None for unhandled event types
+    ec = allEvents.get(event_type, None)
+    if not ec:
+        return None
+    return ec.parse(event_data)

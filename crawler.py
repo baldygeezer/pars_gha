@@ -53,11 +53,12 @@ class Poster():
 
         return resp
 
-def crawl(repo: str, endpoint: str, token: str, num_issues=10, num_events=250, directory=None):
+def crawl(repo: str, endpoint: str, token: str, num_issues=50, num_events=250, directory=None):
     if not Path(directory).exists():
         os.mkdir(directory)
 
     logger.info("starting to crawl repo: "+repo)
+    logger.info("crawling into directory: "+directory)
     start_time = time.time()
     r = Repo(repo)
 

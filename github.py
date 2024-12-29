@@ -1,29 +1,34 @@
 
 class Issue:
-    def __init__(self, url, user, created_at):
+    def __init__(self, url, author, created_at):
         self.url = url
-        self.user = user
+        self.user = author
         self.created_at = created_at
 
     def __str__(self):
-        return "GithubIssue(url=%s, user=%s, created_at=%s)"%(self.url, self.user, self.created_at)
+        return "GithubIssue(url=%s, author=%s, created_at=%s)"%(self.url, self.user, self.created_at)
 
-    def prov(self, repo, doc, mapper):
+    def prov(self, doc, mapper):
         issue_url = mapper.qname(self.url)
-        user_url = mapper.qname(self.user)
+        user_url = mapper.qname(self.user.url)
         create_event_url = mapper.qname(self.url + '#create')
 
         doc.agent(user_url)
         doc.entity(issue_url, {'prov:type': mapper.qname('http://purl.org/github2prov/issue')})
-        if self.pull_request:
-            doc.entity(issue_url, {'prov:type': mapper.qname('http://purl.org/github2prov/pull')})
+        #if self.pull_request:
+        #    doc.entity(issue_url, {'prov:type': mapper.qname('http://purl.org/github2prov/pull')})
 
         doc.wasAttributedTo(issue_url, user_url)
         doc.activity(create_event_url, self.created_at, self.created_at, {'prov:type': mapper.qname('http://purl.org/github2prov/created')})
         doc.wasAssociatedWith(create_event_url, user_url)
         doc.wasGeneratedBy(issue_url, create_event_url)
 
-class PullRequest(GithubIssue):
+    @classmethod
+    def parse(cls, data):
+        author=User.parse(data['author'])
+        return Issue(data['url'],User.parse(data['author']), data['createdAt'])
+
+class PullRequest(Issue):
     def __init__(self, url, user, created_at):
         self.url = url
         self.user = user
@@ -49,6 +54,9 @@ class Repository:
     def __init__(self, name_with_owner: str):
         self.name_with_owner = name_with_owner
 
+    @classmethod
+    def parse(cls, data):
+        return cls(name_with_owner=data['nameWithOwner'])
 
 class User:
     def __init__(self, url: str, login: str, typename: str):
@@ -59,6 +67,13 @@ class User:
     def __repr__(self):
         return f"{rn(self)}(url={self.url}, login={self.login}, typename={self.__typename})"
 
+    @classmethod
+    def parse(cls, data):
+        # in github, if a user has been deleted the api will return none. The frontend uses a dummy user
+        if not data:
+            return cls(url='https://github.com/ghost', login='ghost', typename='User')
+        return cls(url=data['url'], login=data['login'], typename=data['__typename'])
+
 
 class Commit:
     def __init__(self, commit_url: str, oid: str):
@@ -68,6 +83,10 @@ class Commit:
     def __repr__(self):
         return f"{rn(self)}(commit_url={self.commit_url}, oid={self.oid})"
 
+    @classmethod
+    def parse(cls, data):
+        return cls(commit_url=data['commitUrl'], oid=data['oid'])
+
 
 # Define the event classes with common properties and nested objects.
 class Event:
@@ -75,14 +94,39 @@ class Event:
         self.id = id
         self.created_at = created_at
         self.actor = actor
+        self.number = -1
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor})"
 
-class AddedToProjectEvent(Event):
-    def __repr__(self):
-        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, user={self.user})"
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} }}"
 
-class AssignedEvent(Event):
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'], actor=User.parse(data['actor']))
+
+    def prov(self, doc, mapper, issue_url):
+        issue_version = mapper.qname(issue_url + '#' + str(self.number))
+        event_url = mapper.qname(self.url)
+
+        doc.activity(event_url, self.created_at, self.created_at, other_attributes={'prov:type': mapper.qname('http://purl.org/github2prov/' + self.__class__.__name__)})
+
+        actor_url = mapper.qname(self.actor.url)
+        doc.agent(actor_url)
+        doc.wasAssociatedWith(event_url, actor_url, other_attributes={'prov:role': 'github2prov:actor'})
+
+        doc.entity(issue_version, {'prov:type': mapper.qname('http://purl.org/github2prov/issue_version')})
+        doc.specialization(issue_version, issue_url)
+
+        postfix = "" if self.number < 2 else "#"+str(self.number-1)
+        ip = mapper.qname(self.url + postfix)
+
+        doc.used(event_url, ip)
+        doc.wasGeneratedBy(issue_version, event_url)
+
+
+class EventWithUser:
     def __init__(self, id: str, created_at: str, actor: User, user: User):
         super().__init__(id, created_at, actor)
         self.user = user
@@ -90,13 +134,119 @@ class AssignedEvent(Event):
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, user={self.user})"
 
-class ClosedEvent(Event):
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} user {{ url login __typename }} }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   user=User.parse(data['user']))
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+
+        user_url = mapper.qname(self.user.url)
+        event_url = mapper.qname(self.url)
+
+        doc.agent(user_url)
+        doc.wasAssociatedWith(event_url, user_url, other_attributes={'prov:role': 'github2prov:user'})
+
+class EventWithReason(Event):
     def __init__(self, id: str, created_at: str, actor: User, state_reason: str):
         super().__init__(id, created_at, actor)
         self.state_reason = state_reason
 
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, state_reason={self.state_reason}, actor={self.actor})"
+
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} stateReason }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   state_reason=data['stateReason'])
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+
+        event_url = mapper.qname(self.url)
+
+        doc.activity(event_url, other_attributes={'github2prov:reason': self.state_reason})
+
+class EventWithEnabler(Event):
+    def __init__(self, id: str, created_at: str, actor: User, enabler: User):
+        super().__init__(id, created_at, actor)
+        self.enabler = enabler
+
+    def __repr__(self):
+        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, enabler={self.enabler})"
+
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} enabler {{ url login __typename }} }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   enabler=User.parse(data['enabler']))
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+
+        enabler_url = mapper.qname(self.enabler.url)
+        event_url = mapper.qname(self.url)
+
+        doc.agent(enabler_url)
+        doc.wasAssociatedWith(event_url, agent=enabler_url, other_attributes={'prov:role': 'github2prov:enabler'})
+
+
+class AddedToProjectEvent(Event):
+    # databaseId
+    pass
+
+
+class AssignedEvent(Event):
+    def __init__(self, id: str, created_at: str, actor: User, assignee: User):
+        super().__init__(id, created_at, actor)
+        self.assignee = assignee
+
+    def __repr__(self):
+        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, assignee={self.assignee})"
+
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} assignee {{ __typename ... on User {{ url login __typename }} }} }}"
+    pass
+
+    @classmethod
+    def parse(cls, data):
+        actor = User.parse(data['actor'])
+        assignee = actor
+        #TODO it might be a null assignee is because its not a user 
+        if 'assignee' in data:
+            assignee = User.parse(data['assignee'])
+        return cls(id=data['id'], created_at=data['createdAt'], actor=actor, assignee=assignee)
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+
+        assignee_url = mapper.qname(self.assignee.url)
+        event_url = mapper.qname(self.url)
+
+        doc.agent(assignee_url)
+        doc.wasAssociatedWith(event_url, agent=assignee_url, other_attributes={'prov:role': 'github2prov:assignee'})
+
+
+class ClosedEvent(EventWithReason):
+    #url
+    pass
+
 
 class CommentDeletedEvent(Event):
     def __init__(self, id: str, created_at: str, actor: User, deleted_comment_author: User):
@@ -106,8 +256,27 @@ class CommentDeletedEvent(Event):
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, deleted_comment_author={self.deleted_comment_author})"
 
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} deletedCommentAuthor {{ url login __typename }} }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   deleted_comment_author=User.parse(data['deletedCommentAuthor']))
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+
+        dca_url = mapper.qname(self.deleted_comment_author.url)
+        event_url = mapper.qname(self.url)
+
+        doc.agent(dca_url)
+        doc.wasAssociatedWith(event_url, agent=dca_url, other_attributes={'prov:role': 'github2prov:deletedCommentAuthor'})
+
+
 class ConnectedEvent(Event):
-   #TODO
     def __init__(self, id: str, created_at: str, actor: User, source: str, subject: str):
         super().__init__(id, created_at, actor)
         self.source = source
@@ -116,7 +285,24 @@ class ConnectedEvent(Event):
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, source={self.source}, subject={self.subject})"
 
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} source {{ ... on UniformResourceLocatable {{ url }} }} subject {{ ... on UniformResourceLocatable {{ url }} }} }}"
+
+    #TODO check on UniformResourceLocatable
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   source=data['source'], subject=data['subject'])
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+        #TODO source, subject
+
+
 class ConvertedNoteToIssueEvent(Event):
+    # databaseId
     pass
 
 
@@ -125,8 +311,8 @@ class ConvertedToDiscussionEvent(Event):
 
 
 class CrossReferencedEvent(Event):
-    #TODO
-    def __init__(self, id: str, created_at: str, actor: User, referenced_at: str, source, target):
+    # url
+    def __init__(self, id: str, created_at: str, actor: User, referenced_at: str, source: str, target: str):
         super().__init__(id, created_at, actor)
         self.source = source
         self.target = target
@@ -134,29 +320,71 @@ class CrossReferencedEvent(Event):
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, source={self.source}, target={self.target}, referenced_at={self.referenced_at}"
 
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} referencedAt source {{ ... on UniformResourceLocatable {{ url }} }} target {{ ... on UniformResourceLocatable {{ url }} }} }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   referenced_at=data['referencedAt'],
+                   source=data['source'], target=data['target'])
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+        #TODO referenced_at, source, target
+
+
 class DemilestonedEvent(Event):
     pass
 
 
-class DisconnectedEvent(Event):
-    def __init__(self, id: str, created_at: str, actor: User, source: str, subject: str):
-        super().__init__(id, created_at, actor)
-        self.source = source
-        self.subject = subject
-
-    def __repr__(self):
-        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, source={self.source}, subject={self.subject})"
+class DisconnectedEvent(ConnectedEvent):
+    pass
 
 
 class IssueComment(Event):
-    #TODO
-    def __init__(self, id: str, created_at: str, actor: User, body: str, includes_created_edit: bool, is_minimized: bool, source: str, subject: str):
+    # databaseId
+    # url
+    def __init__(self, id: str, created_at: str, actor: User, body: str,
+            includes_created_edit: bool, is_minimized: bool, last_edited_at: str,
+            minimized_reason: str, published_at: str, pull_request: str):
         super().__init__(id, created_at, actor)
-        self.source = source
-        self.subject = subject
+        self.body = body
+        self.includes_created_edit = includes_created_edit
+        self.is_minimized = is_minimized
+        self.last_edited_at = last_edited_at
+        self.minimized_reason = minimized_reason
+        self.published_at = published_at
+        self.pull_request = pull_request
 
     def __repr__(self):
-        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, source={self.source}, subject={self.subject})"
+        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, body={self.body}, includes_created_edit={self.includes_created_edit} is_minimized={self.is_minimized}, last_edited_at={self.last_edited_at}, minimized_reason={self.minimized_reason}, published_at={self.published_at}, pull_request={self.pull_request})"
+
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt author {{ url login __typename }} body includesCreatedEdit isMinimized lastEditedAt minimizedReason publishedAt pullRequest {{ url }} }}"
+
+    @classmethod
+    def parse(cls, data):
+        pr_url = ""
+        if data['pullRequest']:
+            pr_url = data['pullRequest']['url']
+
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['author']),
+                   body=data['body'],
+                   includes_created_edit=data['includesCreatedEdit'],
+                   is_minimized=data['isMinimized'],
+                   last_edited_at=data['lastEditedAt'],
+                   minimized_reason=data['minimizedReason'],
+                   published_at=data['publishedAt'],
+                   pull_request=pr_url)
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+        #TODO
 
 
 class LabeledEvent(Event):
@@ -167,20 +395,77 @@ class LabeledEvent(Event):
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, label={self.label})"
 
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} label {{ name }} }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   label=data['label']['name'])
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+
+        event_url = mapper.qname(self.url)
+        doc.activity(event_url, other_attributes={'github2prov:label': self.label})
+
+
 class LockedEvent(Event):
     def __init__(self, id: str, created_at: str, actor: User, lock_reason: str):
         super().__init__(id, created_at, actor)
         self.lock_reason = lock_reason
 
     def __repr__(self):
-        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, lock_reason={self.state_reason}, actor={self.actor})"
+        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, lock_reason={self.state_reason})"
+
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} lockReason }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   lock_reason=data['lockReason'])
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+
+        event_url = mapper.qname(self.url)
+        doc.activity(event_url, other_attributes={'github2prov:reason': self.lock_reason})
+
 
 class MarkedAsDuplicateEvent(Event):
-    pass
-    #TODO
+    def __init__(self, id: str, created_at: str, actor: User, canonical: str, duplicate: str, is_cross_repository: bool):
+        super().__init__(id, created_at, actor)
+        self.canonical = canonical
+        self.duplicate = duplicate
+        self.is_cross_repository = is_cross_repository
 
+    def __repr__(self):
+        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, canonical={self.canonical}, duplicate={self.duplicate}, is_cross_respository={self.is_cross_repository})"
+
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} canonical {{ __typename ... on Issue {{ url }} ... on PullRequest {{ url }} }} duplicate {{ __typename ... on Issue {{ url }} ... on PullRequest {{ url }} }} isCrossRepository }}"
+
+    #TODO check canonical/duplicate
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   canonical=data['canonical']['url'],
+                   duplicate=data['duplicate']['url'],
+                   is_cross_repository=data['isCrossRepository'])
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+        #TODO
 
 class MentionedEvent(Event):
+    # databaseId
     pass
 
 class MilestonedEvent(Event):
@@ -191,8 +476,25 @@ class MilestonedEvent(Event):
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, milestone_title={self.milestone_title})"
 
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} milestoneTitle }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   milestone_title=data['milestoneTitle'])
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+
+        event_url = mapper.qname(self.url)
+        doc.activity(event_url, other_attributes={'github2prov:milestoneTitle': self.milestone_title})
+
 
 class MovedColumnsInProjectEvent(Event):
+    # databaseId
     pass
 
 
@@ -213,75 +515,113 @@ class ReferencedEvent(Event):
                 f"commit={self.commit}, commit_repository={self.commit_repository}, "
                 f"is_cross_repository={self.is_cross_repository}, is_direct_reference={self.is_direct_reference})")
 
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} commit {{ commitUrl oid }} commitRepository {{ nameWithOwner }} isCrossRepository isDirectReference }}"
 
-class RemovedFromProjectEvent:
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   commit=Commit.parse(data['commit']),
+                   commit_repository=Repository.parse(data['commitRepository']),
+                   is_cross_repository=data['isCrossRepository'],
+                   is_direct_reference=data['isDirectReference'])
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+        #TODO
+
+
+class RemovedFromProjectEvent(Event):
+    # databaseId
     pass
 
 
-class RenamedTitleEvent:
+class RenamedTitleEvent(Event):
     def __init__(self, id: str, created_at: str, actor: User, current_title: str, previous_title: str):
         super().__init__(id, created_at, actor)
         self.current_title = current_title
         self.previous_title = previous_title
 
     def __repr__(self):
-        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, state_reason={self.state_reason}, actor={self.actor})"
+        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, current_title={self.current_title}, previous_title={self.previous_title})"
+
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} currentTitle previousTitle }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   current_title=data['currentTitle'],
+                   previous_title=data['previousTitle'])
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+
+        event_url = mapper.qname(self.url)
+        doc.activity(event_url, other_attributes={'github2prov:currentTitle': self.current_title, 'github2prov:previousTitle': self.previous_title})
+
+class ReopenedEvent(EventWithReason):
+    pass
 
 
-class ReopenedEvent:
-    def __init__(self, id: str, created_at: str, actor: User, state_reason: str):
+class SubscribedEvent(Event):
+    pass
+
+
+class TransferredEvent(Event):
+    def __init__(self, id: str, created_at: str, actor: User, issue: str, from_repository: str):
         super().__init__(id, created_at, actor)
-        self.state_reason = state_reason
+        self.issue = issue
+        self.from_repository = from_repository
 
     def __repr__(self):
-        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, state_reason={self.state_reason}, actor={self.actor})"
+        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, issue={self.issue}, from_repository={self.from_repository})"
+
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} issue {{ url }} fromRepository {{ nameWithOwner }} }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   issue=data['issue']['url'],
+                   from_repository=data['fromRepository']['nameWithOwner'])
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+        #TODO
 
 
-class SubscribedEvent:
+class UnassignedEvent(AssignedEvent):
     pass
 
 
-class TransferredEvent:
-    #TODO
+class UnlabeledEvent(LabeledEvent):
     pass
 
 
-class UnassignedEvent:
-    def __init__(self, id: str, created_at: str, actor: User, user: User):
-        super().__init__(id, created_at, actor)
-        self.user = user
-
-    def __repr__(self):
-        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, user={self.user})"
-
-
-class UnlabeledEvent:
-    def __init__(self, id: str, created_at: str, actor: User, label: str):
-        super().__init__(id, created_at, actor)
-        self.label = label
-
-    def __repr__(self):
-        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, label={self.label})"
-
-
-class UnlockedEvent:
+class UnlockedEvent(Event):
     pass
 
 
-class UnmarkedAsDuplicateEvent:
-    #TODO
+class UnmarkedAsDuplicateEvent(MarkedAsDuplicateEvent):
     pass
 
 
-class UnpinnedEvent:
+class UnpinnedEvent(PinnedEvent):
     pass
 
 
-class UnsubscribedEvent:
+class UnsubscribedEvent(SubscribedEvent):
     pass
 
 
-class UserBlockedEvent:
+class UserBlockedEvent(Event):
     def __init__(self, id: str, created_at: str, actor: User, subject: User):
         super().__init__(id, created_at, actor)
         self.subject = subject
@@ -289,7 +629,25 @@ class UserBlockedEvent:
     def __repr__(self):
         return (f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, "
                 f"subject={self.subject})")
-    pass
+
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} subject {{ url login __typename }} }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   subject=User.parse(data['subject']))
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+
+        subject_url = mapper.qname(self.subject.url)
+        event_url = mapper.qname(self.url)
+
+        doc.agent(subject_url)
+        doc.wasAssociatedWith(event_url, agent=subject_url, other_attributes={'prov:role': 'github2prov:subject'})
 
 
 class PullRequest:
@@ -300,19 +658,6 @@ class PullRequest:
         return f"{rn(self)}(url={self.url})"
 
 
-class ReviewEvent(Event):
-    #TODO is this needed?
-    def __init__(self, id: str, created_at: str, actor: User, author: User, body: str, commit: Commit):
-        super().__init__(id, created_at, actor)
-        self.author = author
-        self.body = body
-        self.commit = commit
-
-    def __repr__(self):
-        return (f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, "
-                f"author={self.author}, body={self.body}, commit={self.commit})")
-
-
 class AddedToMergeQueueEvent(Event):
     def __init__(self, id: str, created_at: str, actor: User, enqueuer: User):
         super().__init__(id, created_at, actor)
@@ -321,6 +666,24 @@ class AddedToMergeQueueEvent(Event):
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, enqueuer={self.enqueuer})"
 
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} enqueuer {{ url login __typename }} }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   enqueuer=User.parse(data['enqueuer']))
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+
+        enqueuer_url = mapper.qname(self.enqueuer.url)
+        event_url = mapper.qname(self.url)
+
+        doc.agent(enqueuer_url)
+        doc.wasAssociatedWith(event_url, agent=enqueuer_url, other_attributes={'prov:role': 'github2prov:enqueuer'})
 
 class AutoMergeDisabledEvent(Event):
     def __init__(self, id: str, created_at: str, actor: User, reason: str, reason_code: int):
@@ -331,32 +694,33 @@ class AutoMergeDisabledEvent(Event):
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, reason={self.reason}, reason_code={self.reason_code})"
 
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} reason reasonCode }}"
 
-class AutoMergeEnabledEvent(Event):
-    def __init__(self, id: str, created_at: str, actor: User, enabler: User):
-        super().__init__(id, created_at, actor)
-        self.enabler = enabler
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   reason=data['reason'],
+                   reason_code=data['reason_code'])
 
-    def __repr__(self):
-        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, enabler={self.enabler})"
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
 
-
-class AutoRebaseEnabledEvent(Event):
-    def __init__(self, id: str, created_at: str, actor: User, enabler: User):
-        super().__init__(id, created_at, actor)
-        self.enabler = enabler
-
-    def __repr__(self):
-        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, enabler={self.enabler})"
+        event_url = mapper.qname(self.url)
+        doc.activity(event_url, other_attributes={'github2prov:reason': self.reason, 'github2prov:reasonCode': self.reasonCode})
 
 
-class AutoSquashEnabledEvent(Event):
-    def __init__(self, id: str, created_at: str, actor: User, enabler: User):
-        super().__init__(id, created_at, actor)
-        self.enabler = enabler
+class AutoMergeEnabledEvent(EventWithEnabler):
+    pass
 
-    def __repr__(self):
-        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, enabler={self.enabler})"
+class AutoRebaseEnabledEvent(EventWithEnabler):
+    pass
+
+
+class AutoSquashEnabledEvent(EventWithEnabler):
+    pass
 
 
 class AutomaticBaseChangeFailedEvent(Event):
@@ -368,6 +732,21 @@ class AutomaticBaseChangeFailedEvent(Event):
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, new_base={self.new_base}, old_base={self.old_base})"
 
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} newBase oldBase }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   new_base=data['newBase'],
+                   old_base=data['oldBase'])
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+        #TODO
+
 
 class AutomaticBaseChangeSucceededEvent(Event):
     def __init__(self, id: str, created_at: str, actor: User, new_base, old_base):
@@ -378,8 +757,23 @@ class AutomaticBaseChangeSucceededEvent(Event):
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, new_base={self.new_base}, old_base={self.old_base})"
 
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} newBase oldBase }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   new_base=data['newBase'],
+                   old_base=data['oldBase'])
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+        #TODO
 
 class BaseRefChangedEvent(Event):
+    # databaseId
     def __init__(self, id: str, created_at: str, actor: User, current_ref_name: str, previous_ref_name: str):
         super().__init__(id, created_at, actor)
         self.current_ref_name = current_ref_name
@@ -387,6 +781,21 @@ class BaseRefChangedEvent(Event):
 
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, current_ref_name={self.current_ref_name}, previous_ref_name={self.previous_ref_name})"
+
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} currentRefName previousRefName }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   current_ref_name=data['currentRefName'],
+                   previous_ref_name=data['previousRefName'])
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+        #TODO
 
 
 class BaseRefDeletedEvent(Event):
@@ -397,6 +806,20 @@ class BaseRefDeletedEvent(Event):
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, base_ref_name={self.base_ref_name})"
 
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} baseRefName }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   base_ref_name=data['baseRefName'])
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+        #TODO
+
 
 class BaseRefForcePushedEvent(Event):
     def __init__(self, id: str, created_at: str, actor:User, after_commit: Commit, before_commit: Commit):
@@ -406,6 +829,21 @@ class BaseRefForcePushedEvent(Event):
 
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, after_commit={self.after_commit}, before_commit={self.before_commit})"
+
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} afterCommit {{ commitUrl oid }} beforeCommit {{ commitUrl oid }} }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   after_commit=Commit.parse(data['afterCommit']),
+                   before_commit=Commit.parse(data['beforeCommit']))
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+        #TODO
 
 
 class ConvertToDraftEvent(Event):
@@ -433,6 +871,8 @@ class HeadRefRestoredEvent(Event):
 
 
 class MergedEvent(Event):
+    # url
+
     def __init__(self, id: str, created_at: str, actor: User, commit: Commit):
         super().__init__(id, created_at, actor)
         self.commit = commit
@@ -440,42 +880,112 @@ class MergedEvent(Event):
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, commit={self.commit})"
 
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} commit {{ commitUrl oid }} }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   commit=Commit.parse(data['commit']))
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+
+        commit_url = mapper.qname(self.commit.commit_url)
+        event_url = mapper.qname(self.url)
+        doc.activity(commit_url)
+        doc.wasInformedBy(event_url, commit_url)
+
 
 class PullRequestCommit:
+    # url
     def __init__(self, id: str, commit: Commit):
         self.id = id
         self.commit = commit
-
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, commit={self.commit})"
 
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id commit {{ commitUrl oid }} }} "
 
 class PullRequestReview(Event):
-    def __init__(self, id: str, created_at: str, author: User, body: str, commit: Commit):
+    # databaseId
+    # url
+    def __init__(self, id: str, created_at: str, actor: User, body: str, commit: Commit):
         super().__init__(id, created_at, actor)
         self.body = body
         self.commit = commit
 
     def __repr__(self):
-        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, author={self.author}, body={self.body}, commit={self.commit})"
+        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, body={self.body}, commit={self.commit})"
+
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt author {{ url login __typename }} body commit {{ commitUrl oid }} }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['author']),
+                   body=data['body'],
+                   commit=Commit.parse(data['commit']))
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+
+        commit_url = mapper.qname(self.commit.commit_url)
+        event_url = mapper.qname(self.url)
+        doc.activity(commit_url)
+        doc.wasInformedBy(event_url, commit_url)
+        doc.activity(event_url, other_attributes={'github2prov:body': self.body})
 
 
 class PullRequestRevisionMarker:
     def __init__(self, created_at: str):
         self.created_at = created_at
+        self.number = -1
 
     def __repr__(self):
         return f"{rn(self)}(created_at={self.created_at})"
 
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ createdAt }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(created_at=data['createdAt'])
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+        #TODO
+
 
 class ReadyForReviewEvent(Event):
-    #TODO
+    # url
     def __init__(self, id: str, created_at: str, actor: User, resource_path):
         super().__init__(id, created_at, actor)
         self.resource_path = resource_path
 
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, resource_path={self.resource_path})"
+
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} resourcePath }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   resource_path=data['resourcePath'])
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+        #TODO
 
 
 class RemovedFromMergeQueueEvent(Event):
@@ -487,12 +997,30 @@ class RemovedFromMergeQueueEvent(Event):
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, reason={self.reason}, before_commit={self.before_commit})"
 
+    @classmethod
+    def fragment(cls):
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} reason beforeCommit {{ commitUrl oid }} }}"
+
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], created_at=data['createdAt'],
+                   actor=User.parse(data['actor']),
+                   reason=data['reason'],
+                   before_commit=Commit.parse(data['beforeCommit']))
+
+    def prov(self, doc, mapper, issue_url):
+        super().prov(doc, mapper, issue_url)
+        #TODO
+
 
 class RemovedFromProjectEvent(Event):
+    # databaseId
     pass
 
 
 class ReviewDismissedEvent(Event):
+    # databaseId
+    # url
     pass
 
 
@@ -502,3 +1030,24 @@ class ReviewRequestRemovedEvent(Event):
 
 class ReviewRequestedEvent(Event):
     pass
+
+_allEvents = [
+AddedToProjectEvent, AssignedEvent, ClosedEvent, CommentDeletedEvent,
+ConnectedEvent, ConvertedNoteToIssueEvent, ConvertedToDiscussionEvent,
+CrossReferencedEvent, DemilestonedEvent, DisconnectedEvent, IssueComment,
+LabeledEvent, LockedEvent, MarkedAsDuplicateEvent, MentionedEvent,
+MilestonedEvent, MovedColumnsInProjectEvent, PinnedEvent, ReferencedEvent,
+RemovedFromProjectEvent, RenamedTitleEvent, ReopenedEvent,
+SubscribedEvent, TransferredEvent, UnassignedEvent, UnlabeledEvent,
+UnlockedEvent, UnmarkedAsDuplicateEvent, UnpinnedEvent, UnsubscribedEvent,
+UserBlockedEvent, AddedToMergeQueueEvent, AutoMergeDisabledEvent,
+AutoMergeEnabledEvent, AutoRebaseEnabledEvent, AutoSquashEnabledEvent,
+AutomaticBaseChangeFailedEvent, AutomaticBaseChangeSucceededEvent,
+BaseRefChangedEvent, BaseRefDeletedEvent, BaseRefForcePushedEvent,
+ConvertToDraftEvent, DeployedEvent, DeploymentEnvironmentChangedEvent,
+HeadRefDeletedEvent, HeadRefForcePushedEvent, HeadRefRestoredEvent,
+MergedEvent, PullRequestReview, PullRequestRevisionMarker,
+ReadyForReviewEvent, RemovedFromMergeQueueEvent, RemovedFromProjectEvent,
+ReviewDismissedEvent, ReviewRequestRemovedEvent, ReviewRequestedEvent
+]
+allEvents = { c.__name__: c for c in _allEvents }

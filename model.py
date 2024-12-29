@@ -3,7 +3,7 @@ from pathlib import Path
 import graphql
 
 issue_persist = [ '__typename', 'id', 'databaseId', 'number', 'title', 'author', 'body', 'createdAt', 'closed',
-        'closedAt', 'updatedAt', 'state', 'stateReason', 'url' ]
+        'closedAt', 'updatedAt', 'state', 'stateReason', 'url', 'resourcePath' ]
 
 class IssuesPage:
     def __init__(self, cursor):
@@ -29,7 +29,7 @@ class IssuesPage:
         return []
 
 pull_request_persist = [ '__typename', 'id', 'databaseId', 'number', 'title', 'author', 'body', 'createdAt', 'baseRefName', 'baseNameRepository', 'closed',
-        'closedAt', 'updatedAt', 'state', 'stateReason', 'url', 'mergeCommit', 'merged', 'mergedAt', 'mergedBy']
+        'closedAt', 'updatedAt', 'state', 'stateReason', 'url', 'resourcePath', 'mergeCommit', 'merged', 'mergedAt', 'mergedBy']
 
 class PullRequestsPage:
     def __init__(self, cursor):
@@ -164,7 +164,7 @@ class Repo:
         d = self.repo_name.replace("/","_")
         p = Path()
         if base:
-            Path(base)
+            p = Path(base)
         p = p / d
         p.mkdir(exist_ok=True)
         return p.absolute()

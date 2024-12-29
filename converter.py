@@ -2,6 +2,8 @@
 import json
 from pathlib import Path
 
+import re
+
 import logging
 logger = logging.getLogger(__name__)
 
@@ -14,6 +16,8 @@ supported_types = {
     'Issue': 'http://purl.org/github2prov/issue',
     'PullRequest': 'http://purl.org/github2prov/pull'
 }
+
+import github
 
 class GithubIssue:
     def __init__(self, url, user, created_at):
@@ -58,56 +62,63 @@ class GithubIssueEvent:
         self.commit = commit
 
 def add_prov_for_issue_or_pull_request(repo, doc, mapper, data):
-    i = make_issue_from_api(data)
-    i.prov(repo, doc, mapper)
+    try:
+        i = github.Issue.parse(data['info'])
+        i.prov(doc, mapper)
+    except Exception as exp:
+        logger.exception("parse issue failed")
+        logger.error(data['info'])
+        raise(exp)
+    events = []
+    for ed in data['events']:
+        try:
+            e = parse_event(ed, i.url)
+            # Mentioned and subscribed events seem to be automatically created
+            # and may not imply any contribution to the issue
+            # Another way would be to limit them to one per user per issue
+            if e and e.__class__.__name__ not in ['MentionedEvent', 'SubscribedEvent']:
+                events.append(e)
+        except Exception as exp:
+            logger.exception("parse event failed")
+            logger.error(ed)
+            raise(exp)
 
-def make_issue_from_api(json):
-    info = json['info']
-    typ = info['__typename']
-    if typ not in supported_types:
-        raise Exception(f'unknown type {typ}')
+    sorted(events, key=lambda x: getattr(x, 'created_at'))
+    count = 1
+    for event in events:
+        event.number = count
+        count += 1
+        event.prov(doc, mapper, i.url)
 
-    issue_url = mapper.qname(info['url'])
-    user_url = mapper.qname(info['author']['url'])
-    created_at = info['createdAt']
+def parse_event(event_data, issue_url):
+    """Parse a single event from the data."""
+    event_type = event_data['__typename']
+    if event_type == "PullRequestCommit":
+        return None
+    ec = github.allEvents.get(event_type, None)
+    if not ec:
+        return None
+    e = ec.parse(event_data)
+    if 'url' in event_data:
+        u = event_data['url']
+        e.url = u.replace('#event-', '/events/')
+    else:
+        # prov python library is correctly output provn with qnames with the
+        # follow characters:
+        # "=" | "'" | "(" | ")" | "," | "-" | ":" | ";" | "[" | "]" | "."
+        i = re.sub(r'[=\'(),-:;\[\]]', '', e.id)
+        u = issue_url + '/events/' + i
+        e.url  = u
+    return e
 
-    return GithubIssue(issue_url, user_url, created_at, pull_request, typ) 
+def convert(repo_slug, directory=None, provn=True):
+    if not Path(directory).exists():
+        os.mkdir(directory)
 
-def make_event_from_api(json):
-    pass
-
-def add_prov_for_issue_or_pull_request_event(repo, doc, mapper, event):
-    issue_version = mapper.qname(event.issue + '#' + str(event.number))
-    event_url = mapper.qname(event.url)
-
-    doc.activity(event_url, event.created_at, event.created_at, {'prov:type': mapper.qname('http://purl.org/github2prov/' + event.typ)})
-
-    if event.user:
-        actor_url = mapper.qname(event.user)
-        doc.agent(actor_url)
-        doc.wasAssociatedWith(event_url, actor_url)
-
-    doc.entity(issue_version, {'prov:type': mapper.qname('http://purl.org/github2prov/issue_version')})
-    doc.specializationOf(issue_version, event.issue)
-
-    # Following event.number being populated
-    postfix = "" if event.number < 2 else "#" + str(event.number - 1)
-    ip = mapper.qname(event.url + postfix)
-
-    doc.used(event_url, ip)
-    doc.wasGeneratedBy(issue_version, event_url)
-
-    if event.commit:
-        commit_url = mapper.qname(event.commit)
-        doc.wasInformedBy(event_url, commit_url)
-        doc.activity(commit_url)
-
-
-def convert(repo_slug):
     r = Repo(repo_slug)
     _, doc, qm = setup_repo(repo_slug)
 
-    directory_path = r.directory()
+    directory_path = r.directory(base=directory)
     for file_path in directory_path.glob('*.json'):
         try:
             with open(file_path, 'r') as file:
@@ -116,4 +127,6 @@ def convert(repo_slug):
                 add_prov_for_issue_or_pull_request(repo_slug, doc, qm, data)
         except Exception as e:
             logger.error(f"processing {file_path.name} failed: {e}")
-    output_prov(directory_path, doc, 'merged', True)
+            logger.exception("exception")
+    print("outputing", directory_path)
+    output_prov(directory_path, doc, 'merged', provn)
