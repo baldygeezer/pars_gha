@@ -120,7 +120,7 @@ class Event:
         doc.specialization(issue_version, issue_url)
 
         postfix = "" if self.number < 2 else "#"+str(self.number-1)
-        ip = mapper.qname(self.url + postfix)
+        ip = mapper.qname(issue_url + postfix)
 
         doc.used(event_url, ip)
         doc.wasGeneratedBy(issue_version, event_url)
