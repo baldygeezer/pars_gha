@@ -1,3 +1,4 @@
+import re
 
 class Issue:
     def __init__(self, url, author, created_at):
@@ -106,11 +107,28 @@ class Event:
     def parse(cls, data):
         return cls(id=data['id'], created_at=data['createdAt'], actor=User.parse(data['actor']))
 
+    def prov_sub_type(self):
+        r'''
+        grep -B 2 'type.*Event' schema.docs.graphql | awk '(/--/){print t, line}(/^type/){t=$2;next}(/"""/){next}(/.*/){line=$0}' | sed 's/Represents a\(n\)\? //;s/ event on .*//' | gawk '{t=$1;t=gensub(/Event/,"",1,t);t=gensub(/([A-Z])/, "_\\1", "g",t); sub(/^_/, "", t);t=tolower(t); w=gensub(/'"'"'/,"","g",$2) ; if (t!=w){print t,w}}'
+cross_referenced mention
+renamed_title renamed
+        '''
+        name = self.__class__.__name__
+        if name.endswith("Event"):
+            name = name[:-5]
+        s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+        r = re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+        if r == "renamed_title":
+            return "renamed"
+        if r == "cross_referenced":
+            return "mention"
+        return r
+
     def prov(self, doc, mapper, issue_url):
         issue_version = mapper.qname(issue_url + '#' + str(self.number))
         event_url = mapper.qname(self.url)
 
-        doc.activity(event_url, self.created_at, self.created_at, other_attributes={'prov:type': mapper.qname('http://purl.org/github2prov/' + self.__class__.__name__)})
+        doc.activity(event_url, self.created_at, self.created_at, other_attributes={'prov:type': mapper.qname('http://purl.org/github2prov/' + self.prov_sub_type())})
 
         actor_url = mapper.qname(self.actor.url)
         doc.agent(actor_url)
