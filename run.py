@@ -9,7 +9,7 @@ from decouple import config
 import graphql
 
 from model import *
-from crawler import crawl
+from crawler import crawl,Poster
 from converter import convert
 from git2prov import git2prov
 
@@ -90,6 +90,14 @@ def cmd_git2prov(
            git2prov(r, directory=working_dir)
         #except Exception as e:
         #   print(e)
+
+@cli.command(name='ratelimit')
+def cmd_ratelimit():
+    poster = Poster(endpoint=graphql_endpoint, token=graphql_token)
+    q = "query { viewer { login } rateLimit { limit remaining used resetAt } }"
+    resp = poster.post(dict(query=q))
+    data = resp.json()
+    print(data)
 
 if __name__ == '__main__':
     cli()
