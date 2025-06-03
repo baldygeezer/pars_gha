@@ -36,7 +36,7 @@ class Poster():
 
     def post(self, body):
         if self.remaining == 0:
-            time.sleep(self.reset_at, time.time())
+            time.sleep(self.reset_at-time.time())
 
         headers = {'Content-type': 'application/json', 'Authorization': f'Bearer {self.token}'}
         resp = requests.post(self.endpoint, json=body, headers=headers)
@@ -91,6 +91,9 @@ def crawl(repo: str, endpoint: str, token: str, num_issues=50, num_events=250, d
         data = resp.json()
         if not validate(data):
             logger.debug(f'post response body failed to validate:\n{body}')
+            errors = data["errors"]
+            if "NOT_FOUND" in [e['type'] for e in errors]:
+                return
             raise(Exception(f'failed to validate: {data["errors"]}'))
 
         next_tasks = t.process(data, r)
