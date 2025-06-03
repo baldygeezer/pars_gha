@@ -37,6 +37,19 @@ class PullRequest(Issue):
     def __str__(self):
         return "GithubPullRequest(url=%s, user=%s, created_at=%s)"%(self.url, self.user, self.created_at)
 
+    def prov(self, doc, mapper):
+        super().prov(doc, mapper)
+
+        print(self.url)
+        issue_url = mapper.qname(self.url)
+
+        doc.entity(issue_url, {'prov:type': mapper.qname('http://purl.org/github2prov/pull')})
+
+    @classmethod
+    def parse(cls, data):
+        author=User.parse(data['author'])
+        return PullRequest(data['url'], User.parse(data['author']), data['createdAt'])
+
 class IssueEvent:
     def __init__(self, url, issue, user, created_at, number, typ, commit=None):
         self.url = url
@@ -667,13 +680,6 @@ class UserBlockedEvent(Event):
         doc.agent(subject_url)
         doc.wasAssociatedWith(event_url, agent=subject_url, other_attributes={'prov:role': 'github2prov:subject'})
 
-
-class PullRequest:
-    def __init__(self, url):
-        self.url = url
-
-    def __repr__(self):
-        return f"{rn(self)}(url={self.url})"
 
 
 class AddedToMergeQueueEvent(Event):

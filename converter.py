@@ -62,9 +62,16 @@ class GithubIssueEvent:
         self.commit = commit
 
 def add_prov_for_issue_or_pull_request(repo, doc, mapper, data):
+    i = None
     try:
-        i = github.Issue.parse(data['info'])
-        i.prov(doc, mapper)
+        if data['info']['__typename'] == "Issue":
+            i = github.Issue.parse(data['info'])
+            i.prov(doc, mapper)
+        elif data['info']['__typename'] == "PullRequest":
+            i = github.PullRequest.parse(data['info'])
+            i.prov(doc, mapper)
+        else:
+            raise(Exception("unknown type"))
     except Exception as exp:
         logger.exception("parse issue failed")
         logger.error(data['info'])
