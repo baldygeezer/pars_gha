@@ -27,7 +27,8 @@ class Issue:
     @classmethod
     def parse(cls, data):
         author=User.parse(data['author'])
-        return Issue(data['url'],User.parse(data['author']), data['createdAt'])
+        return Issue(data['url'], User.parse(data['author']), data['createdAt'])
+
 
 class PullRequest(Issue):
     def __init__(self, url, user, created_at):
@@ -135,6 +136,8 @@ renamed_title renamed
             return "renamed"
         if r == "cross_referenced":
             return "mention"
+        if r == "issue_comment":
+            return "comment"
         return r
 
     def prov(self, doc, mapper, issue_url):
@@ -146,6 +149,7 @@ renamed_title renamed
         actor_url = mapper.qname(self.actor.url)
         doc.agent(actor_url)
         doc.wasAssociatedWith(event_url, actor_url, other_attributes={'prov:role': 'github2prov:actor'})
+        doc.wasAssociatedWith(event_url, actor_url)
 
         doc.entity(issue_version, {'prov:type': mapper.qname('http://purl.org/github2prov/issue_version')})
         doc.specialization(issue_version, issue_url)
