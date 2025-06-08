@@ -414,3 +414,57 @@ def parse_event(event_data):
     if not ec:
         return None
     return ec.parse(event_data)
+
+def stargazers_query(cursor: str | None = None) -> str:
+    after = ""
+    if cursor:
+       after = 'after: "' + cursor + '",'
+    """
+    This constructs a query to grab stargazers
+
+    Returns:
+        A graphql query string tha expects
+            owner - the repo owner
+            name - the repo name
+            ref - the reference (qualifiedName) to use
+            num_per_page - number of items per page
+    """
+    return f'''
+query repository_stargazers($owner: String!, $name: String!, $num_per_page: Int!) {{
+  repository(owner: $owner, name: $name) {{
+    stargazers(first: $num_per_page, {after} orderBy: {{field: STARRED_AT, direction: ASC}}) {{ edges {{
+        starredAt
+        node {{
+          url
+        }}
+      }}
+      pageInfo {{
+        hasNextPage
+        endCursor
+      }}
+    }}
+  }}
+}}
+'''
+
+def repo_query() -> str:
+    """
+    This constructs a query to grab basic information about a repo
+
+    Returns:
+        A graphql query string tha expects
+            owner - the repo owner
+            name - the repo name
+    """
+    return f'''
+query repository_info($owner: String!, $name: String!) {{
+  repository(owner: $owner, name: $name) {{
+    url
+    forkCount
+    stargazerCount
+    watchers {{
+      totalCount
+    }}
+  }}
+}}
+'''

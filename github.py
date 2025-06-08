@@ -73,6 +73,46 @@ class Repository:
     def parse(cls, data):
         return cls(name_with_owner=data['nameWithOwner'])
 
+class Stargazer:
+    def __init__(self,stargazers):
+        self.stargazers = stargazers
+    @classmethod
+    def parse(cls, data):
+        return Stargazer(data)
+    def prov(self, repo_slug, doc, mapper):
+        repo = "https://github.com/"+repo_slug
+        repo_url = mapper.qname(repo)
+        starred = mapper.qname('http://purl.org/github2prov/starred')
+        for s in self.stargazers:
+            when = s['when']
+            who = s['who']
+            name = who.split("https://github.com/")[1]
+            user = mapper.qname(who)
+            activity = mapper.qname(repo + "/" + name)
+            doc.agent(user)
+            doc.activity(activity, when, when, {'prov:type': starred})
+            doc.wasAssociatedWith(activity, user)
+            doc.used(activity, repo_url)
+
+class RepoInfo:
+    def __init__(self, url, fork_count, stargazer_count, watchers_count):
+        self.url = url
+        self.fork_count = fork_count
+        self.stargazer_count = stargazer_count
+        self.watchers_count = watchers_count
+
+    @classmethod
+    def parse(cls, data):
+        return RepoInfo(data['url'], data['fork_count'], data['stargazer_count'], data['watchers_count'])
+
+    def prov(self, doc, mapper):
+        repo_url = mapper.qname(self.url)
+
+        doc.entity(repo_url, {'prov:type': mapper.qname('http://purl.org/github2prov/repository'),
+                              'github2prov:forkCount': self.fork_count,
+                              'github2prov:stargazerCount': self.stargazer_count,
+                              'github2prov:watchersCount': self.watchers_count,
+                              })
 class User:
     def __init__(self, url: str, login: str, typename: str):
         self.url = url
@@ -142,7 +182,8 @@ renamed_title renamed
 
     def prov(self, doc, mapper, issue_url):
         issue_version = mapper.qname(issue_url + '#' + str(self.number))
-        event_url = mapper.qname(self.url)
+        u = issue_url + "/events/" + self.id
+        event_url = mapper.qname(u)
 
         doc.activity(event_url, self.created_at, self.created_at, other_attributes={'prov:type': mapper.qname('http://purl.org/github2prov/' + self.prov_sub_type())})
 

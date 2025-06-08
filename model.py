@@ -124,6 +124,44 @@ class Issue:
 class PullRequest(Issue):
     pass
 
+class Stargazer:
+    filename = "stargazers"
+    def __init__(self):
+        self.cursor = None
+        self.accumulate = []
+        pass
+    def query(self):
+        return graphql.stargazers_query(self.cursor)
+    def process_to_file(self, data):
+        print("stargazers", data)
+        output = None
+        follow_on_tasks = []
+        stargazers = data['data']['repository']['stargazers']
+        self.accumulate.extend(
+            [dict(who=s['node']['url'], when=s['starredAt']) for s in stargazers['edges']])
+
+        if stargazers['pageInfo']['hasNextPage']:
+            self.cursor = stargazers['pageInfo']['endCursor']
+            follow_on_tasks.append(self)
+        else:
+            output = self.accumulate
+        return output, follow_on_tasks
+
+class RepoInfo:
+    filename = "repo_info"
+    def __init__(self):
+        pass
+    def query(self):
+        return graphql.repo_query()
+    def process_to_file(self, data):
+        follow_on_tasks = []
+        return dict(
+            url = data['data']['repository']['url'],
+            fork_count = data['data']['repository']['forkCount'],
+            stargazer_count = data['data']['repository']['stargazerCount'],
+            watchers_count = data['data']['repository']['watchers']['totalCount']), follow_on_tasks
+
+
 class Repo:
     def __init__(self, repo_name):
         self.repo_name = repo_name

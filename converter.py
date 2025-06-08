@@ -61,6 +61,16 @@ class GithubIssueEvent:
         self.typ = typ
         self.commit = commit
 
+def add_prov_for_commit(repo, doc, mapper, data):
+    # grep '{' repo.responses | jq '.[]' | jq -c | jq -s 'sort_by(.commit.author.date)' -c > repo/commits.json
+    try:
+        c = github.GithubCommit.parse(data)
+        c.prov(doc, mapper)
+    except Exception as exp:
+        logger.exception("parse issue failed")
+        logger.error(data)
+        raise(exp)
+
 def add_prov_for_issue_or_pull_request(repo, doc, mapper, data):
     i = None
     try:
@@ -95,6 +105,8 @@ def add_prov_for_issue_or_pull_request(repo, doc, mapper, data):
     for event in events:
         event.number = count
         count += 1
+
+    for event in events:
         event.prov(doc, mapper, i.url)
 
 def parse_event(event_data, issue_url):
@@ -118,6 +130,14 @@ def parse_event(event_data, issue_url):
         e.url  = u
     return e
 
+def add_prov_for_stargazers(repo_slug, doc, mapper, data):
+    s = github.Stargazer.parse(data)
+    s.prov(repo_slug, doc, mapper)
+
+def add_prov_for_repo_info(repo_slug, doc, mapper, data):
+    r = github.RepoInfo.parse(data)
+    r.prov(doc, mapper)
+
 def convert(repo_slug, directory=None, provn=True):
     if not Path(directory).exists():
         os.mkdir(directory)
@@ -131,7 +151,15 @@ def convert(repo_slug, directory=None, provn=True):
             with open(file_path, 'r') as file:
                 logger.debug(f"processing {file_path.name}")
                 data = json.load(file)  # Load the JSON content
-                add_prov_for_issue_or_pull_request(repo_slug, doc, qm, data)
+                if str(file_path).endswith("commits.json"):
+                    for x in data:
+                        add_prov_for_commit(repo_slug, doc, qm, x)
+                elif str(file_path).endswith("repo_info.json"):
+                    add_prov_for_repo_info(repo_slug, doc, qm, data)
+                elif str(file_path).endswith("stargazers.json"):
+                    add_prov_for_stargazers(repo_slug, doc, qm, data)
+                else:
+                    add_prov_for_issue_or_pull_request(repo_slug, doc, qm, data)
         except Exception as e:
             logger.error(f"processing {file_path.name} failed: {e}")
             logger.exception("exception")

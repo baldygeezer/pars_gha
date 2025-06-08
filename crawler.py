@@ -53,7 +53,7 @@ class Poster():
 
         return resp
 
-def crawl(repo: str, endpoint: str, token: str, num_issues=50, num_events=250, directory=None):
+def crawl(repo: str, endpoint: str, token: str, num_issues=50, num_events=250, num_per_page=100, directory=None):
     if not Path(directory).exists():
         os.mkdir(directory)
 
@@ -64,11 +64,13 @@ def crawl(repo: str, endpoint: str, token: str, num_issues=50, num_events=250, d
 
     poster = Poster(endpoint=endpoint, token=token)
 
-    queryIssues = InitialIssues()
-    queryPRs = InitialPullRequests()
+    tasks = []
+    tasks.append(InitialIssues())
+    tasks.append(InitialPullRequests())
+    tasks.append(RepoInfo())
+    tasks.append(Stargazer())
 
     crawling = True
-    tasks = [queryIssues, queryPRs]
 
     count = 0
     while(tasks):
@@ -80,7 +82,8 @@ def crawl(repo: str, endpoint: str, token: str, num_issues=50, num_events=250, d
                     'owner': r.owner,
                     'name': r.name,
                     'num_issues': num_issues,
-                    'num_events': num_events
+                    'num_events': num_events,
+                    'num_per_page': num_per_page,
                 }
         }
         resp = poster.post(body)
@@ -90,13 +93,22 @@ def crawl(repo: str, endpoint: str, token: str, num_issues=50, num_events=250, d
 
         data = resp.json()
         if not validate(data):
-            logger.debug(f'post response body failed to validate:\n{body}')
+            logger.error(f'post response body failed to validate:\n{body}')
             errors = data["errors"]
             if "NOT_FOUND" in [e['type'] for e in errors]:
                 return
             raise(Exception(f'failed to validate: {data["errors"]}'))
 
-        next_tasks = t.process(data, r)
+        next_tasks = []
+        if hasattr(t, "process") and callable(getattr(t, "process")):
+           next_tasks = t.process(data, r)
+        elif hasattr(t, "process_to_file") and callable(getattr(t, "process_to_file")):
+            output = t.process_to_file(data)
+            filename = f'{r.directory(base=directory)}/{t.filename}.json'
+            with open(filename, 'w') as file:
+                dump, tasks = t.process_to_file(data)
+                json.dump(dump, file)
+                tasks.extend(next_tasks)
 
         completed_issues = ",".join([str(x) for x in r.complete_issues()])
         if completed_issues:
