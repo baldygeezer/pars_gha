@@ -138,6 +138,10 @@ def add_prov_for_repo_info(repo_slug, doc, mapper, data):
     r = github.RepoInfo.parse(data)
     r.prov(doc, mapper)
 
+def add_prov_for_releases(repo_slug, doc, mapper, data):
+    r = github.Releases.parse(data)
+    r.prov(repo_slug, doc, mapper)
+
 def convert(repo_slug, directory=None, provn=True):
     if not Path(directory).exists():
         os.mkdir(directory)
@@ -158,6 +162,8 @@ def convert(repo_slug, directory=None, provn=True):
                     add_prov_for_repo_info(repo_slug, doc, qm, data)
                 elif str(file_path).endswith("stargazers.json"):
                     add_prov_for_stargazers(repo_slug, doc, qm, data)
+                elif str(file_path).endswith("releases.json"):
+                    add_prov_for_releases(repo_slug, doc, qm, data)
                 else:
                     add_prov_for_issue_or_pull_request(repo_slug, doc, qm, data)
         except Exception as e:

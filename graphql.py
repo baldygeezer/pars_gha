@@ -447,6 +447,50 @@ query repository_stargazers($owner: String!, $name: String!, $num_per_page: Int!
 }}
 '''
 
+def releases_query(cursor: str | None = None) -> str:
+    after = ""
+    if cursor:
+       after = 'after: "' + cursor + '",'
+    """
+    This constructs a query to grab releases
+
+    Returns:
+        A graphql query string tha expects
+            owner - the repo owner
+            name - the repo name
+            num_per_page - number of items per page
+    """
+    return f'''
+query repository_releases($owner: String!, $name: String!, $num_per_page: Int!) {{
+  repository(owner: $owner, name: $name) {{
+    releases(first: $num_per_page, {after} orderBy: {{field: CREATED_AT, direction: ASC}}) {{ edges {{
+        node {{
+          id
+          name
+          createdAt
+          author {{ url login __typename }}
+          url
+          tagCommit {{ commitUrl oid }}
+          releaseAssets(first: $num_per_page) {{
+            edges {{
+              node {{
+                name
+                url
+                downloadCount
+              }}
+            }}
+          }}
+        }}
+      }}
+      pageInfo {{
+        hasNextPage
+        endCursor
+      }}
+    }}
+  }}
+}}
+'''
+
 def repo_query() -> str:
     """
     This constructs a query to grab basic information about a repo

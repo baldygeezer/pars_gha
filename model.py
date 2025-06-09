@@ -133,7 +133,6 @@ class Stargazer:
     def query(self):
         return graphql.stargazers_query(self.cursor)
     def process_to_file(self, data):
-        print("stargazers", data)
         output = None
         follow_on_tasks = []
         stargazers = data['data']['repository']['stargazers']
@@ -142,6 +141,34 @@ class Stargazer:
 
         if stargazers['pageInfo']['hasNextPage']:
             self.cursor = stargazers['pageInfo']['endCursor']
+            follow_on_tasks.append(self)
+        else:
+            output = self.accumulate
+        return output, follow_on_tasks
+
+class Releases:
+    filename = "releases"
+    def __init__(self):
+        self.cursor = None
+        self.accumulate = []
+        pass
+    def query(self):
+        return graphql.releases_query(self.cursor)
+    def process_to_file(self, data):
+        output = None
+        follow_on_tasks = []
+        releases = data['data']['repository']['releases']
+        for r in releases['edges']:
+            r = r['node']
+            d = {k: r[k] for k in ['id', 'name', 'createdAt', 'author', 'url', 'tagCommit']}
+            dc = 0
+            for rr in r['releaseAssets']['edges']:
+                dc = dc + rr['node']['downloadCount']
+            d['downloadCount'] = dc
+            self.accumulate.append(d)
+
+        if releases['pageInfo']['hasNextPage']:
+            self.cursor = releases['pageInfo']['endCursor']
             follow_on_tasks.append(self)
         else:
             output = self.accumulate

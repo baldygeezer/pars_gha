@@ -69,6 +69,7 @@ def crawl(repo: str, endpoint: str, token: str, num_issues=50, num_events=250, n
     tasks.append(InitialPullRequests())
     tasks.append(RepoInfo())
     tasks.append(Stargazer())
+    tasks.append(Releases())
 
     crawling = True
 

@@ -41,7 +41,7 @@ class PullRequest(Issue):
     def prov(self, doc, mapper):
         super().prov(doc, mapper)
 
-        print(self.url)
+        #print(self.url)
         issue_url = mapper.qname(self.url)
 
         doc.entity(issue_url, {'prov:type': mapper.qname('http://purl.org/github2prov/pull')})
@@ -93,6 +93,34 @@ class Stargazer:
             doc.activity(activity, when, when, {'prov:type': starred})
             doc.wasAssociatedWith(activity, user)
             doc.used(activity, repo_url)
+
+class Releases:
+    def __init__(self,releases):
+        self.releases = releases
+    @classmethod
+    def parse(cls, data):
+        return Releases(data)
+    def prov(self, repo_slug, doc, mapper):
+        print(self.releases)
+        repo = "https://github.com/"+repo_slug
+        repo_url = mapper.qname(repo)
+        release = mapper.qname('http://purl.org/github2prov/release')
+        released = mapper.qname('http://purl.org/github2prov/released')
+        dc = mapper.qname('http://purl.org/github2prov/downloadCount')
+        for s in self.releases:
+            activity = mapper.qname(repo + '/released/' + s['id'])
+            user = mapper.qname(s['author']['url'])
+            when = s['createdAt']
+            commit = mapper.qname(s['tagCommit']['commitUrl'])
+            r = mapper.qname(s['url'])
+
+            doc.agent(user)
+            doc.activity(activity, when, when, {'prov:type': released})
+            doc.entity(r, {'prov:type':release, 'prov:label':s['name'], dc:s['downloadCount']})
+            doc.wasGeneratedBy(r, activity)
+            doc.wasAssociatedWith(activity, user)
+            doc.used(activity,commit)
+            doc.wasDerivedFrom(r, commit)
 
 class RepoInfo:
     def __init__(self, url, fork_count, stargazer_count, watchers_count):
