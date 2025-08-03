@@ -1,4 +1,66 @@
 import re
+from datetime import datetime
+
+class GithubCommit:
+    def __init__(self, url: str, sha: str, author: str, author_name: str, committer: str, committer_name: str, created_at: str, parents: str, message: str):
+        self.url = url
+        self.sha = sha
+        self.author = author
+        self.author_name = author_name
+        self.committer = committer
+        self.committer_name = committer_name
+        self.created_at = created_at
+        self.parents = parents if parents else []
+        self.message = message
+
+    def prov(self, doc, mapper):
+        # TODO: shouldn't commit.url, commit.author and commit.committer be q-minted also?
+        doc.activity(self.url, self.created_at, self.created_at, {
+            'prov:type': mapper.qname('http://purl.org/github2prov/commit') 
+        })
+
+        # TODO: what do we do if commit.author or commit.committer is None?
+        # In some cases commit.author_name appears valid, but commit.author is None
+        if self.author and self.author != "https://api.github.com/users/web-flow":
+            doc.agent(self.author, {'rdfs:label': self.author_name})
+            doc.wasAssociatedWith(self.url, self.author, None, None, {'prov:role':'author'})
+            doc.wasAssociatedWith(self.url, self.author)
+
+        if self.committer and self.committer != "https://api.github.com/users/web-flow":
+            doc.agent(self.committer, {'rdfs:label': self.committer_name})
+            doc.wasAssociatedWith(self.url, self.committer, None, None, {'prov:role':'committer'})
+            doc.wasAssociatedWith(self.url, self.committer)
+
+        for parent in self.parents:
+            doc.wasInformedBy(self.url, parent)
+
+    @classmethod
+    def parse(cls, data):
+        url = data['url']
+        sha = data['sha']
+
+        # Obtain authorship info if it exists
+        author_el = data.get('author', {})
+        author = author_el.get('url', None) if author_el else None
+        author_name = data.get('commit', {}).get('author', {}).get('name', None)
+
+        # Obtain committer info it exists
+        committer_el = data.get('committer', {})
+        committer = committer_el.get('url', None) if committer_el else None
+        committer_name = data.get('commit', {}).get('committer', {}).get('name', None)
+
+        # Created time used for both start and end PROV entries
+        created_at = data.get('commit', {}).get('committer', {}).get('date', None)
+
+        # Retrieve parent commits if they exist
+        parents = [c['url'] for c in data.get('parents', [])]
+
+        # Ensure commit message has newlines removed
+        message = data.get('commit', {}).get('message', {})
+        message = ' '.join(message.split())
+
+        return GithubCommit(url, sha, author, author_name, committer, committer_name, created_at, parents, message)
+
 
 class Issue:
     def __init__(self, url, author, created_at):
