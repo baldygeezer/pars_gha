@@ -1,5 +1,7 @@
 
 import json
+import gzip
+import itertools
 from pathlib import Path
 
 import re
@@ -142,7 +144,7 @@ def add_prov_for_releases(repo_slug, doc, mapper, data):
     r = github.Releases.parse(data)
     r.prov(repo_slug, doc, mapper)
 
-def convert(repo_slug, directory=None, provn=True):
+def convert(repo_slug, directory=None, provn=True, compress=False):
     if not Path(directory).exists():
         os.mkdir(directory)
 
@@ -150,19 +152,21 @@ def convert(repo_slug, directory=None, provn=True):
     _, doc, qm = setup_repo(repo_slug)
 
     directory_path = r.directory(base=directory)
-    for file_path in directory_path.glob('*.json'):
+    for file_path in itertools.chain(directory_path.glob('*.json'), directory_path.glob('*.json.gz')):
+        fp = str(file_path)
+        fp = fp[:-3] if fp.endswith('.gz') else fp
         try:
-            with open(file_path, 'r') as file:
+            with open_file(file_path) as file:
                 logger.debug(f"processing {file_path.name}")
                 data = json.load(file)  # Load the JSON content
-                if str(file_path).endswith("commits.json"):
+                if str(fp).endswith("commits.json"):
                     for x in data:
                         add_prov_for_commit(repo_slug, doc, qm, x)
-                elif str(file_path).endswith("repo_info.json"):
+                elif str(fp).endswith("repo_info.json"):
                     add_prov_for_repo_info(repo_slug, doc, qm, data)
-                elif str(file_path).endswith("stargazers.json"):
+                elif str(fp).endswith("stargazers.json"):
                     add_prov_for_stargazers(repo_slug, doc, qm, data)
-                elif str(file_path).endswith("releases.json"):
+                elif str(fp).endswith("releases.json"):
                     add_prov_for_releases(repo_slug, doc, qm, data)
                 else:
                     add_prov_for_issue_or_pull_request(repo_slug, doc, qm, data)
@@ -170,4 +174,10 @@ def convert(repo_slug, directory=None, provn=True):
             logger.error(f"processing {file_path.name} failed: {e}")
             logger.exception("exception")
     print("outputing", directory_path)
-    output_prov(directory_path, doc, 'merged', provn)
+    output_prov(directory_path, doc, 'merged', provn, compress)
+
+def open_file(filename):
+    if str(filename).endswith('.gz'):
+        return gzip.open(filename, 'rt')
+    else:
+        return open(filename, 'r')

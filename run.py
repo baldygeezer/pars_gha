@@ -52,11 +52,13 @@ def cmd_crawl(
 @click.option('-f', '--file', 'repos_file', required=False, type=click.File('r'), help='File with one GitHub repo per line in <user>/<repo_name> format.')
 @click.option('-d', '--directory', 'working_dir', required=False, type=click.Path(file_okay=False, dir_okay=True, readable=True), default='output', help='Directory to write output to')
 @click.option('-n', '--provn', 'provn', required=False, is_flag=True, default=False, help='Whether to generate PROV-N records.')
+@click.option('-z', '--compress', 'compress', required=False, is_flag=True, default=False, help='Whether to write compressed output.')
 def cmd_convert(
     repo,
     repos_file: typing.Optional[click.File],
     working_dir: typing.Optional[click.Path],
-    provn: bool
+    provn: bool,
+    compress: bool
 ):
     repos = []
     if repos_file is not None:
@@ -66,7 +68,7 @@ def cmd_convert(
 
     for r in repos:
         #try:
-           convert(r, directory=working_dir, provn=provn)
+           convert(r, directory=working_dir, provn=provn, compress=compress)
         #except Exception as e:
         #   print(e)
 

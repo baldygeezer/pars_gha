@@ -1,5 +1,7 @@
 import os
 import prov
+import gzip
+
 from prov.model import ProvDocument
 
 from lib.github_tools import QNameMinter
@@ -46,12 +48,18 @@ def setup_repo(repo):
     return project_entity, d1, QNameMinter(d1)
 
 
-def output_prov(repodir_path: str, prov_doc: prov.model.ProvDocument, info_type: str, provn: bool):
+def output_prov(repodir_path: str, prov_doc: prov.model.ProvDocument, info_type: str, provn: bool, compress: bool):
+    def open_file(filename, compress):
+        if compress:
+            return gzip.open(filename+".gz", 'wt', encoding='utf-8')
+        else:
+            return open(filename, 'w', encoding='utf-8')
+
     provo_output_filepath = os.path.join(repodir_path, info_type + '.ttl');
-    with open(provo_output_filepath, 'w', encoding='utf-8') as text_file:
+    with open_file(provo_output_filepath, compress) as text_file:
         text_file.write(prov_doc.serialize(format='rdf', rdf_format='ttl'))
 
     if provn:
         provn_output_filepath = os.path.join(repodir_path, info_type + '.provn');
-        with open(provn_output_filepath, 'w', encoding='utf-8') as text_file:
+        with open_file(provo_output_filepath, compress) as text_file:
             text_file.write(prov_doc.get_provn())
