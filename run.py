@@ -42,10 +42,11 @@ def cmd_crawl(
         repos = list(repo)
 
     for r in repos:
-        #try:
+        try:
             crawl(r, graphql_endpoint, graphql_token, num_issues=num_issues, num_events=num_events, directory=working_dir)
-        #except Exception as e:
-        #   print(e)
+            time.sleep(0.5)
+        except Exception as e:
+           print(r, e)
 
 @cli.command(name='convert')
 @click.argument('repo', nargs=-1)

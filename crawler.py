@@ -35,8 +35,10 @@ class Poster():
         self.token = token
 
     def post(self, body):
-        if self.remaining == 0:
-            time.sleep(self.reset_at-time.time())
+        if self.remaining < 2:
+            delay = 1 + self.reset_at - time.time()
+            if delay > 0:
+                time.sleep(delay)
 
         headers = {'Content-type': 'application/json', 'Authorization': f'Bearer {self.token}'}
         resp = requests.post(self.endpoint, json=body, headers=headers)
@@ -46,7 +48,7 @@ class Poster():
             return self.post(body)
         else:
             resp.raise_for_status()
-        if self.remaining == 0:
+        if self.remaining < 4:
             logger.warn(f'rate limit: remaining: {self.remaining} reset: {self.reset_at}')
         else:
             logger.debug(f'rate limit: remaining: {self.remaining} reset: {self.reset_at}')
