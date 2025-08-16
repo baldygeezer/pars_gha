@@ -96,11 +96,12 @@ def crawl(repo: str, endpoint: str, token: str, num_issues=50, num_events=250, n
 
         data = resp.json()
         if not validate(data):
-            logger.error(f'post response body failed to validate:\n{body}')
+            logger.error(f'post response body failed to validate response for repo {repo}:\n{body}')
+            logger.error(f'post response body failed to validate response for repo {repo}:\n{data}')
             errors = data["errors"]
             if "NOT_FOUND" in [e['type'] for e in errors]:
                 return
-            raise(Exception(f'failed to validate: {data["errors"]}'))
+            raise(Exception(f'failed to validate respose for repo {repo}: {data["errors"]}'))
 
         next_tasks = []
         if hasattr(t, "process") and callable(getattr(t, "process")):
@@ -109,7 +110,7 @@ def crawl(repo: str, endpoint: str, token: str, num_issues=50, num_events=250, n
             output = t.process_to_file(data)
             filename = f'{r.directory(base=directory)}/{t.filename}.json'
             with open(filename, 'w') as file:
-                dump, tasks = t.process_to_file(data)
+                dump, next_task = t.process_to_file(data)
                 json.dump(dump, file)
                 tasks.extend(next_tasks)
 
