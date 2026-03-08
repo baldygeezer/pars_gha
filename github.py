@@ -1,5 +1,4 @@
 import re
-from datetime import datetime
 
 class GithubCommit:
     def __init__(self, url: str, sha: str, author: str, author_name: str, committer: str, committer_name: str, created_at: str, parents: str, message: str):
@@ -89,7 +88,6 @@ class Issue:
 
     @classmethod
     def parse(cls, data):
-        author=User.parse(data['author'])
         return Issue(data['url'], User.parse(data['author']), data['createdAt'])
 
 
@@ -111,7 +109,6 @@ class PullRequest(Issue):
 
     @classmethod
     def parse(cls, data):
-        author=User.parse(data['author'])
         return PullRequest(data['url'], User.parse(data['author']), data['createdAt'])
 
 class IssueEvent:
@@ -166,7 +163,6 @@ class Releases:
     def prov(self, repo_slug, doc, mapper):
         print(self.releases)
         repo = "https://github.com/"+repo_slug
-        repo_url = mapper.qname(repo)
         release = mapper.qname('http://purl.org/github2prov/release')
         released = mapper.qname('http://purl.org/github2prov/released')
         dc = mapper.qname('http://purl.org/github2prov/downloadCount')
@@ -1171,11 +1167,6 @@ class RemovedFromMergeQueueEvent(Event):
     def prov(self, doc, mapper, issue_url):
         super().prov(doc, mapper, issue_url)
         #TODO
-
-
-class RemovedFromProjectEvent(Event):
-    # databaseId
-    pass
 
 
 class ReviewDismissedEvent(Event):

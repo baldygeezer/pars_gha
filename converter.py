@@ -1,4 +1,5 @@
 
+import os
 import json
 import gzip
 import itertools
@@ -6,20 +7,19 @@ from pathlib import Path
 
 import re
 
-import logging
-logger = logging.getLogger(__name__)
-
 from model import Repo
 
 from lib.github_prov import setup_repo, output_prov
-from lib.github_tools import QNameMinter
+
+import github
+
+import logging
+logger = logging.getLogger(__name__)
 
 supported_types = {
     'Issue': 'http://purl.org/github2prov/issue',
     'PullRequest': 'http://purl.org/github2prov/pull'
 }
-
-import github
 
 class GithubIssue:
     def __init__(self, url, user, created_at):

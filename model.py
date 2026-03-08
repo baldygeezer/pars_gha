@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import logging
+
 import graphql
 
 issue_persist = [ '__typename', 'id', 'databaseId', 'number', 'title', 'author', 'body', 'createdAt', 'closed',

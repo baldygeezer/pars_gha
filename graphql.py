@@ -1,6 +1,6 @@
 from typing import List
 
-from model import Issue, PullRequest
+from model import *
 from github import *
 
 fragment_common_items = "\n".join([x.fragment() for x in

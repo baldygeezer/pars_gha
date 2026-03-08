@@ -1,3 +1,5 @@
+import os
+
 from lib.git2prov import run_git2prov
 from pathlib import Path
 

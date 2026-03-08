@@ -1,13 +1,14 @@
 import time 
-import logging
 import os
+import glob
 from pathlib import Path
 
 import requests
 import json
 
-from model import *
+from model import Repo, Issues, PullRequests, RepoInfo, Stargazer, Releases, Commits
 
+import logging
 logger = logging.getLogger(__name__)
 
 def validate(resp):

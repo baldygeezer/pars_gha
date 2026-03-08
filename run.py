@@ -6,9 +6,6 @@ import typing
 import click
 from decouple import config
 
-import graphql
-
-from model import *
 from crawler import crawl,Poster
 from converter import convert
 from git2prov import git2prov
