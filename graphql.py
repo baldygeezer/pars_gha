@@ -106,12 +106,17 @@ def pull_requests_query(cursor: str | None = None) -> str:
             name - the repo name
             num_issues - number of pull requests to request
             num_events - number of events per pull requests to request
+
     """
+    after = ""
+    if cursor:
+       after = 'after: "' + cursor + '",'
+
     return f'''{fragment_pull_request_info}
 {fragment_pull_request_items}
 query ongoing($owner: String!, $name: String!, $num_issues: Int!, $num_events: Int!) {{
   repository(owner: $owner, name: $name) {{
-    pullRequests(first: $num_issues, after: "{cursor}") {{
+    pullRequests(first: $num_issues, {after} orderBy: {{field: CREATED_AT, direction: DESC}}) {{
       nodes {{
         ...FragmentPullRequestInfo
         timelineItems(first: $num_events) {{
@@ -152,11 +157,14 @@ def issues_query(cursor: str| None = None) -> str:
             num_issues - number of issues to request
             num_events - number of events per issues to request
     """
+    after = ""
+    if cursor:
+       after = 'after: "' + cursor + '",'
     return f'''{fragment_issue_info}
 {fragment_issue_items}
 query ongoing($owner: String!, $name: String!, $num_issues: Int!, $num_events: Int!) {{
   repository(owner: $owner, name: $name) {{
-    issues(first: $num_issues, after: "{cursor}") {{
+    issues(first: $num_issues, {after} orderBy: {{field: CREATED_AT, direction: DESC}}) {{
       nodes {{
         ...FragmentIssueInfo
         timelineItems(first: $num_events) {{
@@ -313,7 +321,9 @@ def parse_commit(commit_data):
     """Helper function to parse a commit."""
     return Commit(
         commit_url=commit_data['commitUrl'],
-        oid=commit_data['oid']
+        oid=commit_data['oid'],
+        date=commit_data['committedDate'],
+        author=author
     )
 def parse_issue(issue_data):
     return Issue()
@@ -333,87 +343,33 @@ def parse_event(event_data):
         return None
     return ec.parse(event_data)
 
-def commits_initial_query():
-    """
-    This constructs the first query for commits on a repository
-
-    Returns:
-        A graphql query string that expects
-            owner - the repo owner
-            name - the repo name
-            ref - the reference (qualifiedName) to use
-            num_commits - number of commits to request
-    """
+def commits_query(cursor: str | None = None) -> str:
+    after = ""
+    if cursor:
+       after = 'after: "' + cursor + '",'
     return f'''
-query initial_commits($owner: String!, $name: String!, $ref String!, $num_commits: Int!) {{
+query get_commits($owner: String!, $name: String!, $num_commits: Int!) {{
   repository(owner: $owner, name: $name) {{
-    ref(qualifiedName: $ref) {{
+    defaultBranchRef {{
       target {{
         ... on Commit {{
-          history(first: $num_commits) {{
+          history(first: $num_commits {after}) {{
             edges {{
               node {{
                 oid
                 commitUrl
                 message
                 committedDate
+                authoredDate
                 author {{
                   name
                   email
-                  user
+                  user {{ url login __typename }}
                 }}
                 committer {{
                   name
                   email
-                  user
-                }}
-              }}
-            }}
-            pageInfo {{
-              endCursor
-              hasNextPage
-            }}
-          }}
-        }}
-      }}
-    }}
-  }}
-}}
-'''
-
-def commits_ongoing_query(cursor: str) -> str:
-    """
-    This constructs the first query for commits on a repository
-
-    Returns:
-        A graphql query string tha expects
-            owner - the repo owner
-            name - the repo name
-            ref - the reference (qualifiedName) to use
-            num_commits - number of commits to request
-    """
-    return f'''
-query ongoing_commits($owner: String!, $name: String!, $ref String!, $num_commits: Int!) {{
-  repository(owner: $owner, name: $name) {{
-    ref(qualifiedName: $ref) {{
-      target {{
-        ... on Commit {{
-          history(first: $num_commits, after: "{cursor}") {{
-            edges {{
-              node {{
-                oid
-                commitUrl
-                message
-                committedDate
-                author {{
-                  name
-                  email
-                  user
-                }}
-                committer {{
-                  name
-                  email
-                  user
+                  user {{ url login __typename }}
                 }}
               }}
             }}
@@ -446,7 +402,7 @@ def stargazers_query(cursor: str | None = None) -> str:
     return f'''
 query repository_stargazers($owner: String!, $name: String!, $num_per_page: Int!) {{
   repository(owner: $owner, name: $name) {{
-    stargazers(first: $num_per_page, {after} orderBy: {{field: STARRED_AT, direction: ASC}}) {{ edges {{
+    stargazers(first: $num_per_page, {after} orderBy: {{field: STARRED_AT, direction: DESC}}) {{ edges {{
         starredAt
         node {{
           url
@@ -477,7 +433,7 @@ def releases_query(cursor: str | None = None) -> str:
     return f'''
 query repository_releases($owner: String!, $name: String!, $num_per_page: Int!) {{
   repository(owner: $owner, name: $name) {{
-    releases(first: $num_per_page, {after} orderBy: {{field: CREATED_AT, direction: ASC}}) {{ edges {{
+    releases(first: $num_per_page, {after} orderBy: {{field: CREATED_AT, direction: DESC}}) {{ edges {{
         node {{
           id
           name

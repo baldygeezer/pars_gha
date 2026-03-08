@@ -26,12 +26,14 @@ def cli():
 @click.argument('repo', nargs=-1)
 @click.option('-f', '--file', 'repos_file', required=False, type=click.File('r'), help='File with one GitHub repo per line in <user>/<repo_name> format.')
 @click.option('-d', '--directory', 'working_dir', required=False, type=click.Path(file_okay=False, dir_okay=True, readable=True), default='output', help='Directory to write output to')
+@click.option('-r', '--recrawl', 'recrawl', required=False, is_flag=True, default=False, help='Whether to load already crawled data and continue crawling')
 def cmd_crawl(
     repo,
     num_issues: int,
     num_events: int,
     repos_file: typing.Optional[click.File],
-    working_dir: typing.Optional[click.Path]
+    working_dir: typing.Optional[click.Path],
+    recrawl: bool
 ):
     repos = []
     if repos_file is not None:
@@ -41,7 +43,7 @@ def cmd_crawl(
 
     for r in repos:
         try:
-            crawl(r, graphql_endpoint, graphql_token, num_issues=num_issues, num_events=num_events, directory=working_dir)
+            crawl(r, graphql_endpoint, graphql_token, num_issues=num_issues, num_events=num_events, directory=working_dir, load=recrawl)
             time.sleep(0.5)
         except Exception as e:
            print(r, e)
