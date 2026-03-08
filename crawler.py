@@ -69,7 +69,7 @@ class Poster():
 
         return resp
 
-def crawl(repo: str, endpoint: str, token: str, num_issues=50, num_events=250, num_per_page=100, directory=None):
+def crawl(repo: str, endpoint: str, token: str, num_issues=50, num_events=250, num_per_page=100, directory=None, load=False):
     if not Path(directory).exists():
         os.mkdir(directory)
 
@@ -81,102 +81,76 @@ def crawl(repo: str, endpoint: str, token: str, num_issues=50, num_events=250, n
     poster = Poster(endpoint=endpoint, token=token)
 
     tasks = []
-    tasks.append(InitialIssues())
-    tasks.append(InitialPullRequests())
+    tasks.append(Issues())
+    tasks.append(PullRequests())
     tasks.append(RepoInfo())
     tasks.append(Stargazer())
     tasks.append(Releases())
+    tasks.append(Commits())
 
-    crawling = True
+    if load:
+        for t in tasks:
+            if hasattr(t, "load") and callable(getattr(t, "load")):
+                if hasattr(t, "filename"):
+                    filename = f'{r.directory(base=directory)}/{t.filename}.json'
+                    with open(filename, 'r') as file:
+                        data = json.load(file)
+                        t.load(data)
+                elif hasattr(t, "glob"):
+                    g = t.glob
+                    d = r.directory(base=directory)
+                    files = glob.glob(f'{d}/{g}*.json')
+                    data = []
+                    for filename in files:
+                        with open(filename, 'r') as file:
+                            data.append(json.load(file))
+                    t.load(data)
 
     count = 0
     while(tasks):
         t = tasks.pop()
         query = t.query()
-        print(query)
-        body = {
-                'query': query,
-                'variables': {
-                    'owner': r.owner,
-                    'name': r.name,
-                    'num_issues': num_issues,
-                    'num_events': num_events,
-                    'num_per_page': num_per_page,
-                }
-        }
-        resp = poster.post(body)
+        data = None
+        if query:
+            body = {
+                    'query': query,
+                    'variables': {
+                        'owner': r.owner,
+                        'name': r.name,
+                        'num_issues': num_issues,
+                        'num_events': num_events,
+                        'num_per_page': num_per_page,
+                        'num_commits': 100,
+                    }
+            }
+            resp = poster.post(body)
 
-        count = count + 1
-        logger.error(f'post response had error code {resp.status_code}')
+            count = count + 1
+            logger.error(f'post response had error code {resp.status_code} {body}')
 
-        data = resp.json()
-        if not validate(data):
-            logger.error(f'post response body failed to validate response for repo {repo}:\n{body}')
-            logger.error(f'post response body failed to validate response for repo {repo}:\n{data}')
-            errors = data["errors"]
-            if "NOT_FOUND" in [e['type'] for e in errors]:
-                return
-            raise(Exception(f'failed to validate respose for repo {repo}: {data["errors"]}'))
+            data = resp.json()
+            print("got", data)
+            if not validate(data):
+                logger.error(f'post response body failed to validate response for repo {repo}:\n{body}')
+                logger.error(f'post response body failed to validate response for repo {repo}:\n{data}')
+                errors = data["errors"]
+                if "NOT_FOUND" in [e['type'] for e in errors]:
+                    return
+                raise(Exception(f'failed to validate respose for repo {repo}: {data["errors"]}'))
 
         next_tasks = []
         if hasattr(t, "process") and callable(getattr(t, "process")):
            next_tasks = t.process(data, r)
         elif hasattr(t, "process_to_file") and callable(getattr(t, "process_to_file")):
-            output = t.process_to_file(data)
-            filename = f'{r.directory(base=directory)}/{t.filename}.json'
-            with open(filename, 'w') as file:
-                dump, next_task = t.process_to_file(data)
-                json.dump(dump, file)
-                tasks.extend(next_tasks)
-
-        completed_issues = ",".join([str(x) for x in r.complete_issues()])
-        if completed_issues:
-            logger.info(f'post found complete issues: { completed_issues }')
-        incomplete_issues = ",".join([str(x) for x in r.incomplete_issues()])
-        if incomplete_issues:
-            logger.info(f'post found incomplete issues: { incomplete_issues }')
-
-        completed_pull_requests = ",".join([str(x) for x in r.complete_pull_requests()])
-        if completed_pull_requests:
-            logger.info(f'post found complete pull_requests: { completed_pull_requests }')
-        incomplete_pull_requests = ",".join([str(x) for x in r.incomplete_pull_requests()])
-        if incomplete_pull_requests:
-            logger.info(f'post found incomplete pull_requests: { incomplete_pull_requests }')
+            dump, next_tasks = t.process_to_file(data)
+            if dump is not None:
+                for key, data in dump.items():
+                    filename = f'{r.directory(base=directory)}/{key}.json'
+                    with open(filename, 'w') as file:
+                        json.dump(data, file)
 
         if next_tasks:
             tasks.extend(next_tasks)
-
-        for i in r.complete_issues():
-            logger.debug(f'complete issue {i}')
-            issue = r.issues[i]
-            filename = f'{r.directory(base=directory)}/issue{i:06d}.json'
-            logger.debug(f'writing to filename {filename}')
-            with open(filename, 'w') as file:
-                dump = dict(info=issue.info, events=issue.events)
-                json.dump(dump, file)
-            r.remove_issue(i)
-
-        for i in r.complete_pull_requests():
-            logger.debug(f'complete pull request {i}')
-            pr = r.pull_requests[i]
-            filename = f'{r.directory(base=directory)}/pull_request{i:06d}.json'
-            logger.debug(f'filename {filename}')
-            with open(filename, 'w') as file:
-                dump = dict(info=pr.info, events=pr.events)
-                json.dump(dump, file)
-            r.remove_pull_request(i)
-
-        inc = r.incomplete_issues()
-        if len(inc) > 0 and (len(inc) > 10 or len(tasks)==0):
-            logger.debug(f'not complete {len(inc)} issues')
-            fill = IssuesEventsPage([r.issues[i] for i in inc])
-            tasks.append(fill)
-
-        inc = r.incomplete_pull_requests()
-        if len(inc) > 0 and (len(inc) > 10 or len(tasks)==0):
-            logger.debug(f'not complete {len(inc)} pull_requests')
-            fill = PullRequestsEventsPage([r.pull_requests[i] for i in inc])
-            tasks.append(fill)
 
     end_time = time.time()
     logger.debug(f'crawl domplete, made { count } requests in {end_time - start_time} seconds')

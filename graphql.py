@@ -93,89 +93,7 @@ fragment FragmentPullRequestInfo on PullRequest {
 }
 '''
 
-def issues_initial_query() -> str:
-    """
-    This constructs the first query for issues on a repository
-
-    Returns:
-        A graphql query string that expects
-            owner - the repo owner
-            name - the repo name
-            num_issues - number of issues to request
-            num_events - number of events per issue to request
-    """
-    return f'''{fragment_issue_info}
-{fragment_issue_items}
-query initial_issues($owner: String!, $name: String!, $num_issues: Int!, $num_events: Int!) {{
-  repository(owner: $owner, name: $name) {{
-    issues(first: $num_issues) {{
-      nodes {{
-        ...FragmentIssueInfo
-        timelineItems(first: $num_events) {{
-          totalCount
-          edges {{
-            node {{
-              ...FragmentTimelineNode
-            }}
-          }}
-          pageInfo {{
-            endCursor
-            hasNextPage
-          }}
-        }}
-      }}
-      totalCount
-      pageInfo {{
-        endCursor
-        hasNextPage
-      }}
-    }}
-  }}
-}}
-'''
-
-def pull_requests_initial_query() -> str:
-    """
-    This constructs the first query for pull requests on a repository
-
-    Returns:
-        A graphql query string that expects
-            owner - the repo owner
-            name - the repo name
-            num_issues - number of pull requests to request
-            num_events - number of events per pull requests to request
-    """
-    return f'''{fragment_pull_request_info}
-{fragment_pull_request_items}
-query initial_pull_requests($owner: String!, $name: String!, $num_issues: Int!, $num_events: Int!) {{
-  repository(owner: $owner, name: $name) {{
-    pullRequests(first: $num_issues) {{
-      nodes {{
-        ...FragmentPullRequestInfo
-        timelineItems(first: $num_events) {{
-          totalCount
-          edges {{
-            node {{
-              ...FragmentPRTimelineNode
-            }}
-          }}
-          pageInfo {{
-            endCursor
-            hasNextPage
-          }}
-        }}
-      }}
-      totalCount
-      pageInfo {{
-        endCursor
-        hasNextPage
-      }}
-    }}
-  }}
-}}
-'''
-
-def pull_requests_ongoing_query(cursor: str) -> str:
+def pull_requests_query(cursor: str | None = None) -> str:
     """
     This constructs the follow on query for pull requests on a repository
 
@@ -220,7 +138,7 @@ query ongoing($owner: String!, $name: String!, $num_issues: Int!, $num_events: I
 '''
 
 
-def issues_ongoing_query(cursor: str) -> str:
+def issues_query(cursor: str| None = None) -> str:
     """
     This constructs the follow on query for issues on a repository
 
