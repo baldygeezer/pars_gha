@@ -35,6 +35,22 @@ class Poster():
         self.endpoint = endpoint
         self.token = token
 
+    def _post(self, body, headers):
+        backoff_factor = 2
+        retry = True
+        try_count = 0
+        while retry:
+            resp = requests.post(self.endpoint, json=body, headers=headers)
+            try_count = try_count + 1
+            if resp.status_code not in [429, 502]:
+                resp.raise_for_status()
+                return resp
+            if try_count > 5:
+                retry = False
+                continue
+            time.sleep(backoff_factor ** try_count)
+        resp.raise_for_status()
+
     def post(self, body):
         if self.remaining < 2:
             delay = 1 + self.reset_at - time.time()
@@ -42,13 +58,10 @@ class Poster():
                 time.sleep(delay)
 
         headers = {'Content-type': 'application/json', 'Authorization': f'Bearer {self.token}'}
-        resp = requests.post(self.endpoint, json=body, headers=headers)
+        resp = self._post(body, headers)
         self.remaining = int(resp.headers.get('x-ratelimit-remaining', -1))
         self.reset_at = int(resp.headers.get('x-ratelimit-reset', time.time()))
-        if resp.status_code == 429:
-            return self.post(body)
-        else:
-            resp.raise_for_status()
+
         if self.remaining < 4:
             logger.warn(f'rate limit: remaining: {self.remaining} reset: {self.reset_at}')
         else:
