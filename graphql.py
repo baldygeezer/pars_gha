@@ -415,6 +415,102 @@ def parse_event(event_data):
         return None
     return ec.parse(event_data)
 
+def commits_initial_query():
+    """
+    This constructs the first query for commits on a repository
+
+    Returns:
+        A graphql query string that expects
+            owner - the repo owner
+            name - the repo name
+            ref - the reference (qualifiedName) to use
+            num_commits - number of commits to request
+    """
+    return f'''
+query initial_commits($owner: String!, $name: String!, $ref String!, $num_commits: Int!) {{
+  repository(owner: $owner, name: $name) {{
+    ref(qualifiedName: $ref) {{
+      target {{
+        ... on Commit {{
+          history(first: $num_commits) {{
+            edges {{
+              node {{
+                oid
+                commitUrl
+                message
+                committedDate
+                author {{
+                  name
+                  email
+                  user
+                }}
+                committer {{
+                  name
+                  email
+                  user
+                }}
+              }}
+            }}
+            pageInfo {{
+              endCursor
+              hasNextPage
+            }}
+          }}
+        }}
+      }}
+    }}
+  }}
+}}
+'''
+
+def commits_ongoing_query(cursor: str) -> str:
+    """
+    This constructs the first query for commits on a repository
+
+    Returns:
+        A graphql query string tha expects
+            owner - the repo owner
+            name - the repo name
+            ref - the reference (qualifiedName) to use
+            num_commits - number of commits to request
+    """
+    return f'''
+query ongoing_commits($owner: String!, $name: String!, $ref String!, $num_commits: Int!) {{
+  repository(owner: $owner, name: $name) {{
+    ref(qualifiedName: $ref) {{
+      target {{
+        ... on Commit {{
+          history(first: $num_commits, after: "{cursor}") {{
+            edges {{
+              node {{
+                oid
+                commitUrl
+                message
+                committedDate
+                author {{
+                  name
+                  email
+                  user
+                }}
+                committer {{
+                  name
+                  email
+                  user
+                }}
+              }}
+            }}
+            pageInfo {{
+              endCursor
+              hasNextPage
+            }}
+          }}
+        }}
+      }}
+    }}
+  }}
+}}
+'''
+
 def stargazers_query(cursor: str | None = None) -> str:
     after = ""
     if cursor:

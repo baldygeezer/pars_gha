@@ -79,6 +79,7 @@ def crawl(repo: str, endpoint: str, token: str, num_issues=50, num_events=250, n
     while(tasks):
         t = tasks.pop()
         query = t.query()
+        print(query)
         body = {
                 'query': query,
                 'variables': {

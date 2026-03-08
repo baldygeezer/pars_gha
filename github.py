@@ -72,6 +72,7 @@ class Issue:
         return "GithubIssue(url=%s, author=%s, created_at=%s)"%(self.url, self.user, self.created_at)
 
     def prov(self, doc, mapper):
+        #print(self)
         issue_url = mapper.qname(self.url)
         user_url = mapper.qname(self.user.url)
         create_event_url = mapper.qname(self.url + '#create')
@@ -683,7 +684,7 @@ class ReferencedEvent(Event):
 
     @classmethod
     def fragment(cls):
-        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} commit {{ commitUrl oid }} commitRepository {{ nameWithOwner }} isCrossRepository isDirectReference }}"
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} commit {{ commitUrl committedDate oid }} commitRepository {{ nameWithOwner }} isCrossRepository isDirectReference }}"
 
     @classmethod
     def parse(cls, data):
@@ -991,7 +992,7 @@ class BaseRefForcePushedEvent(Event):
 
     @classmethod
     def fragment(cls):
-        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} afterCommit {{ commitUrl oid }} beforeCommit {{ commitUrl oid }} }}"
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} afterCommit {{ commitUrl committedDate oid }} beforeCommit {{ commitUrl oid }} }}"
 
     @classmethod
     def parse(cls, data):
@@ -1041,7 +1042,7 @@ class MergedEvent(Event):
 
     @classmethod
     def fragment(cls):
-        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} commit {{ commitUrl oid }} }}"
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} commit {{ commitUrl committedDate oid }} }}"
 
     @classmethod
     def parse(cls, data):
@@ -1068,7 +1069,7 @@ class PullRequestCommit:
 
     @classmethod
     def fragment(cls):
-        return f"... on {cls.__name__} {{ id commit {{ commitUrl oid }} }} "
+        return f"... on {cls.__name__} {{ id commit {{ commitUrl committedDate oid }} }} "
 
 class PullRequestReview(Event):
     # databaseId
@@ -1083,7 +1084,7 @@ class PullRequestReview(Event):
 
     @classmethod
     def fragment(cls):
-        return f"... on {cls.__name__} {{ id createdAt author {{ url login __typename }} body commit {{ commitUrl oid }} }}"
+        return f"... on {cls.__name__} {{ id createdAt author {{ url login __typename }} body commit {{ commitUrl committedDate oid }} }}"
 
     @classmethod
     def parse(cls, data):
@@ -1158,7 +1159,7 @@ class RemovedFromMergeQueueEvent(Event):
 
     @classmethod
     def fragment(cls):
-        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} reason beforeCommit {{ commitUrl oid }} }}"
+        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} reason beforeCommit {{ commitUrl committedDate oid }} }}"
 
     @classmethod
     def parse(cls, data):

@@ -98,6 +98,28 @@ class PullRequestsEventsPage:
             r.pull_requests[num].cursor = timeline['pageInfo']['endCursor']
         return []
 
+class InitialCommits:
+    def __init__(self):
+        pass
+    def query(self):
+        return graphql.commits_initial_query()
+
+class CommitsPage:
+    def __init__(self, commits):
+        self.commits = commits
+    def query(self):
+        return graphql.issues_fill_query(self.issues)
+    def process(self, data, r):
+        issues = data['data']['repository']
+        for k, issue in issues.items():
+            num = issue['number']
+            timeline = issue['timelineItems']
+            events = map(lambda x: x['node'], timeline['edges'])
+            r.issues[num].add_events(events)
+            r.issues[num].complete(not timeline['pageInfo']['hasNextPage'])
+            r.issues[num].cursor = timeline['pageInfo']['endCursor']
+        return []
+
 
 class Issue:
     def __init__(self, issueId):
@@ -188,7 +210,6 @@ class RepoInfo:
             stargazer_count = data['data']['repository']['stargazerCount'],
             watchers_count = data['data']['repository']['watchers']['totalCount']), follow_on_tasks
 
-
 class Repo:
     def __init__(self, repo_name):
         self.repo_name = repo_name
@@ -197,6 +218,7 @@ class Repo:
         self.name = name
         self.issues = dict()
         self.pull_requests = dict()
+        self.commits = dict()
         self.info = None
 
     def add_issue(self, issueId):
