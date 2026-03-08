@@ -486,10 +486,21 @@ query repository_info($owner: String!, $name: String!) {{
 '''
 doi: in:readme 2026-01-01..2026-01-31 sort:created
 '''
-def search_repos(cursor: str | None = None) -> str:
+def search_repos(cursor: str | None = None, include_readme: bool = False) -> str:
     after = ""
     if cursor:
        after = 'after: "' + cursor + '",'
+    
+    readme_field = ""
+    if include_readme:
+        readme_field = '''
+          readme: object(expression:"HEAD:README.md") {
+            ... on Blob {
+              text
+            }
+          }
+        '''
+
     return f'''
 query search($term: String!, $num_per_page: Int!) {{
   search(query: $term, type: REPOSITORY, {after} first: $num_per_page) {{
@@ -498,11 +509,7 @@ query search($term: String!, $num_per_page: Int!) {{
         ... on Repository {{
           nameWithOwner
           createdAt
-          readme: object(expression:"HEAD:README.md") {{
-            ... on Blob {{
-              text
-            }}
-          }}
+          {readme_field}
         }}
       }}
     }}

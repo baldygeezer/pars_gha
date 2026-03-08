@@ -12,7 +12,7 @@ class RangeTooWide(Exception):
         super().__init__(f'Range Too Wide: {total} results')
         self.total = total
 
-def search_for(poster, term, start_date, end_date, num_per_page, cursor=None):
+def search_for(poster, term, start_date, end_date, num_per_page, include_readme=False, cursor=None):
     d = ""
     if start_date and not end_date:
         d= "created:>=" + start_date
@@ -25,7 +25,7 @@ def search_for(poster, term, start_date, end_date, num_per_page, cursor=None):
     searching = True
     results = []
     while(searching):
-        query = graphql.search_repos(cursor)
+        query = graphql.search_repos(cursor, include_readme)
         body = {
                 'query': query,
                 'variables': {
@@ -56,13 +56,13 @@ repository README.md file contains a given search term
 
 GitHub's search APIs are limited to 1000 search results so inorder 
 """
-def find(graphql_endpoint, graphql_token, term, start_date=None, end_date=None):
+def find(graphql_endpoint, graphql_token, term, start_date=None, end_date=None, include_readme=False):
     poster = Poster(endpoint=graphql_endpoint, token=graphql_token)
     all_results = []
 
     if not start_date or not end_date:
         try:
-            results = search_for(poster, term, start_date, end_date, 50)
+            results = search_for(poster, term, start_date, end_date, 50, include_readme)
             all_results.extend(results)
         except RangeTooWide as e:
             print(f"range too wide: {e.total}")
@@ -98,7 +98,7 @@ def find(graphql_endpoint, graphql_token, term, start_date=None, end_date=None):
         e_date_str = chunk_end.isoformat()
         
         try:
-            results = search_for(poster, term, s_date_str, e_date_str, 50)
+            results = search_for(poster, term, s_date_str, e_date_str, 50, include_readme)
             all_results.extend(results)
             
             # Success, advance time

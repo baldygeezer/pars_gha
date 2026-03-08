@@ -105,9 +105,10 @@ def cmd_ratelimit():
 @cli.command(name='find')
 @click.option('-s', '--start', 'start_date', required=False, type=str, help='Start date of the time range to search.')
 @click.option('-e', '--end', 'end_date', required=False, type=str, help='End date of the time range to search.')
+@click.option('--readme', 'include_readme', required=False, is_flag=True, default=False, help='Whether to include README in search.')
 @click.argument('term', nargs=1)
-def cmd_find(term, start_date: typing.Optional[str], end_date: typing.Optional[str]):
-    find(graphql_endpoint, graphql_token, term, start_date, end_date)
+def cmd_find(term, start_date: typing.Optional[str], end_date: typing.Optional[str], include_readme: bool):
+    find(graphql_endpoint, graphql_token, term, start_date, end_date, include_readme)
 
 if __name__ == '__main__':
     cli()
