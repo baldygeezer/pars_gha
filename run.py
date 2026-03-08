@@ -9,6 +9,7 @@ from decouple import config
 from crawler import crawl,Poster
 from converter import convert
 from git2prov import git2prov
+from find import find
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,13 @@ def cmd_ratelimit():
     resp = poster.post(dict(query=q))
     data = resp.json()
     print(data)
+
+@cli.command(name='find')
+@click.option('-s', '--start', 'start_date', required=False, type=str, help='Start date of the time range to search.')
+@click.option('-e', '--end', 'end_date', required=False, type=str, help='End date of the time range to search.')
+@click.argument('term', nargs=1)
+def cmd_find(term, start_date: typing.Optional[str], end_date: typing.Optional[str]):
+    find(graphql_endpoint, graphql_token, term, start_date, end_date)
 
 if __name__ == '__main__':
     cli()
