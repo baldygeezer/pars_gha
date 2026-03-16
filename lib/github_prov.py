@@ -37,7 +37,7 @@ def setup_repo(repo):
     d1.add_namespace('tree_api', tree_api_url)
     d1.add_namespace('pulls_uri', pulls_uri)
     d1.add_namespace('comments', comments_url)
-    d1.add_namespace(repo.replace("/","_"), github_project_url)
+    d1.add_namespace('repo', github_project_url)
     d1.add_namespace('commits', commits_url)
     d1.add_namespace('localhost', 'http://localhost/')
     d1.add_namespace('github2prov', 'http://purl.org/github2prov/')
