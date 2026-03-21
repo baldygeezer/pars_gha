@@ -47,10 +47,26 @@ def upload(repo: str, endpoint: str, username: str, password: str, directory: st
 
     logger.info(f"Uploading {file_to_upload} to {upload_url} with graph {graph_uri}")
 
+    try:
+        # First, delete the existing graph content
+        logger.info(f"Deleting existing content in graph {graph_uri}")
+        delete_response = requests.delete(
+            upload_url,
+            params={'graph': graph_uri},
+            auth=(username, password)
+        )
+        # We don't necessarily raise_for_status() here because the graph might not exist yet (404)
+        if delete_response.status_code not in [200, 204, 404]:
+            delete_response.raise_for_status()
+
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"Failed to delete graph {graph_uri} (might not exist): {e}")
+
     with open(file_to_upload, 'rb') as f:
         try:
-            # Using POST to append data to the specified named graph
+            # Using POST to append data to the (now empty) specified named graph
             response = requests.post(
+
                 upload_url,
                 params={'graph': graph_uri},
                 data=f,
