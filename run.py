@@ -10,6 +10,7 @@ from crawler import crawl,Poster
 from converter import convert
 from git2prov import git2prov
 from find import find
+from upload import upload
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,33 @@ def cmd_git2prov(
            git2prov(r, directory=working_dir)
         #except Exception as e:
         #   print(e)
+
+@cli.command(name='upload')
+@click.option('-e', '--endpoint', 'endpoint', required=True, help='Endpoint URL')
+@click.option('-u', '--username', 'username', required=True, help='Username')
+@click.option('-p', '--password', 'password', required=True, help='Password')
+@click.argument('repo', nargs=-1)
+@click.option('-f', '--file', 'repos_file', required=False, type=click.File('r'), help='File with one GitHub repo per line in <user>/<repo_name> format.')
+@click.option('-d', '--directory', 'working_dir', required=False, type=click.Path(file_okay=False, dir_okay=True, readable=True), default='output', help='Directory to write output to')
+def cmd_upload(
+    endpoint,
+    username,
+    password,
+    repo,
+    repos_file: typing.Optional[click.File],
+    working_dir: typing.Optional[click.Path]
+):
+    repos = []
+    if repos_file is not None:
+        repos = list(itertools.chain(repos, map(str.strip, repos_file)))
+    elif repo is not None:
+        repos = list(repo)
+
+    for r in repos:
+        try:
+           upload(r, endpoint, username, password, directory=working_dir)
+        except Exception as e:
+           print(r, e)
 
 @cli.command(name='ratelimit')
 def cmd_ratelimit():
