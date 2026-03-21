@@ -140,6 +140,8 @@ class Stargazer:
     def parse(cls, data):
         return Stargazer(data)
     def prov(self, repo_slug, doc, mapper):
+        if self.stargazers is None:
+            return
         repo = "https://github.com/"+repo_slug
         repo_url = mapper.qname(repo)
         starred = mapper.qname('http://purl.org/github2prov/starred')
@@ -212,7 +214,7 @@ class User:
     @classmethod
     def parse(cls, data):
         # in github, if a user has been deleted the api will return none. The frontend uses a dummy user
-        if not data:
+        if not data or 'url' not in data::
             return cls(url='https://github.com/ghost', login='ghost', typename='User')
         return cls(url=data['url'], login=data['login'], typename=data['__typename'])
 
