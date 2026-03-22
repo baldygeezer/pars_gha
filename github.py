@@ -214,7 +214,7 @@ class User:
     @classmethod
     def parse(cls, data):
         # in github, if a user has been deleted the api will return none. The frontend uses a dummy user
-        if not data or 'url' not in data::
+        if not data or 'url' not in data:
             return cls(url='https://github.com/ghost', login='ghost', typename='User')
         return cls(url=data['url'], login=data['login'], typename=data['__typename'])
 
@@ -752,6 +752,8 @@ class TransferredEvent(Event):
 
     @classmethod
     def parse(cls, data):
+        if 'fromRepository' not in data:
+            return None
         return cls(id=data['id'], created_at=data['createdAt'],
                    actor=User.parse(data['actor']),
                    issue=data['issue']['url'],

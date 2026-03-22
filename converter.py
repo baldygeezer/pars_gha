@@ -160,6 +160,8 @@ def convert(repo_slug, directory=None, provn=True, compress=False):
                 logger.debug(f"processing {file_path.name}")
                 data = json.load(file)  # Load the JSON content
                 if str(fp).endswith("commits.json"):
+                    if data is None:
+                        data = []
                     for x in data:
                         add_prov_for_commit(repo_slug, doc, qm, x)
                 elif str(fp).endswith("repo_info.json"):
