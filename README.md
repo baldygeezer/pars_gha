@@ -94,6 +94,25 @@ repo name. Its advised to use the compress option that with generate a
 python run.py convert user/repo --provn
 ```
 
+## Upload
+
+Uploads the converted provenance (PROV) records (`merged.ttl` or
+`merged.ttl.gz`) to a Jena Fuseki endpoint using the Graph Store
+Protocol. The command will first delete the existing contents of the
+named graph before uploading the new data.
+
+- `-e, --endpoint`: The Jena Fuseki endpoint URL (e.g., `http://localhost:3030/ds`).
+- `-u, --username`: The username for authentication.
+- `-p, --password`: The password for authentication.
+- `-f, --file`: File containing a list of repositories to upload.
+- `-d, --directory`: Directory containing the converted Turtle data (default: `output`).
+
+The named graph URI is constructed as `https://github.com/repos/<user>/<repo>`.
+
+```bash
+python run.py upload user/repo -e http://localhost:3030/ds -u admin -p password
+```
+
 ## Ratelimit
 
 Checks the current status of the GitHub GraphQL API rate limit. It
