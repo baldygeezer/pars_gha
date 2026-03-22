@@ -126,6 +126,47 @@ def cmd_upload(
         except Exception as e:
            print(r, e)
 
+@cli.command(name='ingest')
+@click.option('-r', '--recrawl', 'recrawl', required=False, is_flag=True, default=False, help='Whether to load already crawled data and continue crawling')
+@click.option('-U', '--fuseki-endpoint', 'fuseki_endpoint', default=fuseki_endpoint, required=True, help='Fuseki Endpoint URL')
+@click.option('-u', '--username', 'username', default=fuseki_user, required=True, help='Fuseki Username')
+@click.option('-p', '--password', 'password', default=fuseki_password, required=True, help='Fuseki Password')
+@click.argument('repo', nargs=-1)
+@click.option('-f', '--file', 'repos_file', required=False, type=click.File('r'), help='File with one GitHub repo per line in <user>/<repo_name> format.')
+@click.option('-d', '--directory', 'working_dir', required=False, type=click.Path(file_okay=False, dir_okay=True, readable=True), default='output', help='Directory to write output to')
+def cmd_ingest(
+    repo,
+    recrawl: bool,
+    fuseki_endpoint: str,
+    username: str,
+    password: str,
+    repos_file: typing.Optional[click.File],
+    working_dir: typing.Optional[click.Path]
+):
+    repos = []
+    if repos_file is not None:
+        repos = list(itertools.chain(repos, map(str.strip, repos_file)))
+    elif repo is not None:
+        repos = list(repo)
+
+    for r in repos:
+        try:
+            logger.info(f"Ingesting {r}")
+            # 1. Crawl (using defaults: num_issues=50, num_events=250)
+            crawl(r, graphql_endpoint, graphql_token, num_issues=50, num_events=250, directory=working_dir, load=recrawl)
+            time.sleep(0.5)
+
+            # 2. Convert (using defaults: provn=False, compress=True)
+            convert(r, directory=working_dir, provn=False, compress=True)
+
+            # 3. Upload
+            upload(r, fuseki_endpoint, username, password, directory=working_dir)
+
+            logger.info(f"Successfully ingested {r}")
+        except Exception as e:
+            logger.error(f"Failed to ingest {r}: {e}")
+            print(r, e)
+
 @cli.command(name='ratelimit')
 def cmd_ratelimit():
     poster = Poster(endpoint=graphql_endpoint, token=graphql_token)

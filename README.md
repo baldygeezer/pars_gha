@@ -119,6 +119,28 @@ variables can be used in place of `--endpoint`, `--username` and
 python run.py upload user/repo -e http://localhost:3030/ds -u admin -p password
 ```
 
+## Ingest
+
+Combines the `crawl`, `convert`, and `upload` commands into a single
+workflow for one or more repositories. It uses default settings for
+crawling (50 issues/PRs, 250 events) and conversion (compressed Turtle
+output, no PROV-N).
+
+- `-r, --recrawl`: Resume crawling using existing data.
+- `-U, --fuseki-endpoint`: The Jena Fuseki endpoint URL (e.g., `http://localhost:3030/ds`).
+- `-u, --username`: The username for authentication.
+- `-p, --password`: The password for authentication.
+- `-f, --file`: File containing a list of repositories to ingest.
+- `-d, --directory`: Directory for intermediate and final output (default: `output`).
+
+Like the standalone commands, Fuseki credentials can be provided via
+the `FUSEKI_ENDPOINT`, `FUSEKI_USER`, and `FUSEKI_PASSWORD`
+environment variables.
+
+```bash
+python run.py ingest user/repo -U http://localhost:3030/ds -u admin -p password
+```
+
 ## Ratelimit
 
 Checks the current status of the GitHub GraphQL API rate limit. It
