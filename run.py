@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 graphql_endpoint = config('ENDPOINT', default='https://api.github.com/graphql')
 graphql_token = config('TOKEN')
 
+fuseki_endpoint = config('FUSEKI_ENDPOINT', default=None)
+fuseki_user = config('FUSEKI_USER', default=None)
+fuseki_password = config('FUSEKI_PASSWORD', default=None)
+
 @click.group()
 def cli():
     logging.basicConfig(level=config('LOG_LEVEL', default='INFO'))
@@ -96,9 +100,9 @@ def cmd_git2prov(
         #   print(e)
 
 @cli.command(name='upload')
-@click.option('-e', '--endpoint', 'endpoint', required=True, help='Endpoint URL')
-@click.option('-u', '--username', 'username', required=True, help='Username')
-@click.option('-p', '--password', 'password', required=True, help='Password')
+@click.option('-e', '--endpoint', 'endpoint', default=fuseki_endpoint, required=True, help='Endpoint URL')
+@click.option('-u', '--username', 'username', default=fuseki_user, required=True, help='Username')
+@click.option('-p', '--password', 'password', default=fuseki_password, required=True, help='Password')
 @click.argument('repo', nargs=-1)
 @click.option('-f', '--file', 'repos_file', required=False, type=click.File('r'), help='File with one GitHub repo per line in <user>/<repo_name> format.')
 @click.option('-d', '--directory', 'working_dir', required=False, type=click.Path(file_okay=False, dir_okay=True, readable=True), default='output', help='Directory to write output to')

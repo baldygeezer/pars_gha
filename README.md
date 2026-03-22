@@ -108,6 +108,12 @@ named graph before uploading the new data.
 - `-d, --directory`: Directory containing the converted Turtle data (default: `output`).
 
 The named graph URI is constructed as `https://github.com/repos/<user>/<repo>`.
+Note that the endpoint inclused the name of the database in fuseki.
+
+The `FUSEKI_ENDPOINT`, `FUSEKI_USER`, and `FUSEKI_PASSWORD` environment
+variables can be used in place of `--endpoint`, `--username` and
+`--passsord` arguments
+
 
 ```bash
 python run.py upload user/repo -e http://localhost:3030/ds -u admin -p password
