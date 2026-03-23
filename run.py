@@ -106,13 +106,15 @@ def cmd_git2prov(
 @click.argument('repo', nargs=-1)
 @click.option('-f', '--file', 'repos_file', required=False, type=click.File('r'), help='File with one GitHub repo per line in <user>/<repo_name> format.')
 @click.option('-d', '--directory', 'working_dir', required=False, type=click.Path(file_okay=False, dir_okay=True, readable=True), default='output', help='Directory to write output to')
+@click.option('-D', '--rm', 'delete_only', required=False, is_flag=True, default=False, help='Whether the upload just deletes the existing graph.')
 def cmd_upload(
     endpoint,
     username,
     password,
     repo,
     repos_file: typing.Optional[click.File],
-    working_dir: typing.Optional[click.Path]
+    working_dir: typing.Optional[click.Path],
+    delete_only
 ):
     repos = []
     if repos_file is not None:
@@ -122,7 +124,7 @@ def cmd_upload(
 
     for r in repos:
         try:
-           upload(r, endpoint, username, password, directory=working_dir)
+           upload(r, endpoint, username, password, directory=working_dir, delete_only=delete_only)
         except Exception as e:
            print(r, e)
 

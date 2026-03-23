@@ -106,6 +106,8 @@ named graph before uploading the new data.
 - `-p, --password`: The password for authentication.
 - `-f, --file`: File containing a list of repositories to upload.
 - `-d, --directory`: Directory containing the converted Turtle data (default: `output`).
+- `-D, --rm`: Only delete the existing contents of the named graph and skip upload.
+
 
 The named graph URI is constructed as `https://github.com/repos/<user>/<repo>`.
 Note that the endpoint inclused the name of the database in fuseki.

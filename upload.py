@@ -4,7 +4,22 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-def upload(repo: str, endpoint: str, username: str, password: str, directory: str = 'output'):
+def delete_graph(graph_uri, upload_url, username, password):
+    try:
+        # First, delete the existing graph content
+        logger.info(f"Deleting existing content in graph {graph_uri}")
+        delete_response = requests.delete(
+            upload_url,
+            params={'graph': graph_uri},
+            auth=(username, password)
+        )
+        # We don't necessarily raise_for_status() here because the graph might not exist yet (404)
+        if delete_response.status_code not in [200, 204, 404]:
+            delete_response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"Failed to delete graph {graph_uri} (might not exist): {e}")
+
+def upload(repo: str, endpoint: str, username: str, password: str, directory: str = 'output', delete_only: bool = False):
     """
     Uploads the converted Turtle file (merged.ttl or merged.ttl.gz) from the repo's
     output directory to a Jena Fuseki endpoint.
@@ -12,6 +27,16 @@ def upload(repo: str, endpoint: str, username: str, password: str, directory: st
     """
     # Sanitize repo name for path
     repo_path = repo.replace("/", "_")
+
+    # Fuseki Graph Store Protocol endpoint
+    upload_url = f"{endpoint.rstrip('/')}/data"
+
+    graph_uri = f"https://github.com/repos/{repo}"
+
+    if delete_only:
+        delete_graph(graph_uri, upload_url, username, password)
+        return
+
     target_dir = os.path.join(directory, repo_path)
 
     if not os.path.exists(target_dir):
@@ -36,31 +61,13 @@ def upload(repo: str, endpoint: str, username: str, password: str, directory: st
     file_to_upload = existing_files[0]
     filename = os.path.basename(file_to_upload)
 
-    # Fuseki Graph Store Protocol endpoint
-    upload_url = f"{endpoint.rstrip('/')}/data"
-
-    graph_uri = f"https://github.com/repos/{repo}"
-
     headers = {'Content-Type': 'text/turtle'}
     if filename.endswith('.gz'):
         headers['Content-Encoding'] = 'gzip'
 
     logger.info(f"Uploading {file_to_upload} to {upload_url} with graph {graph_uri}")
 
-    try:
-        # First, delete the existing graph content
-        logger.info(f"Deleting existing content in graph {graph_uri}")
-        delete_response = requests.delete(
-            upload_url,
-            params={'graph': graph_uri},
-            auth=(username, password)
-        )
-        # We don't necessarily raise_for_status() here because the graph might not exist yet (404)
-        if delete_response.status_code not in [200, 204, 404]:
-            delete_response.raise_for_status()
-
-    except requests.exceptions.RequestException as e:
-        logger.warning(f"Failed to delete graph {graph_uri} (might not exist): {e}")
+    delete_graph(graph_uri, upload_url, username, password)
 
     with open(file_to_upload, 'rb') as f:
         try:
