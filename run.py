@@ -15,7 +15,7 @@ from upload import upload
 logger = logging.getLogger(__name__)
 
 graphql_endpoint = config('ENDPOINT', default='https://api.github.com/graphql')
-graphql_token = config('TOKEN')
+graphql_token = config('GITHUB_TOKEN')
 
 fuseki_endpoint = config('FUSEKI_ENDPOINT', default=None)
 fuseki_user = config('FUSEKI_USER', default=None)
