@@ -22,12 +22,12 @@ class GithubCommit:
         # In some cases commit.author_name appears valid, but commit.author is None
         if self.author and self.author != "https://api.github.com/users/web-flow":
             doc.agent(self.author, {'rdfs:label': self.author_name})
-            doc.wasAssociatedWith(self.url, self.author, None, None, {'prov:role':'author'})
+            doc.wasAssociatedWith(self.url, self.author, None, None, {'prov:role':mapper.qname('http://purl.org/github2prov/author')})
             doc.wasAssociatedWith(self.url, self.author)
 
         if self.committer and self.committer != "https://api.github.com/users/web-flow":
             doc.agent(self.committer, {'rdfs:label': self.committer_name})
-            doc.wasAssociatedWith(self.url, self.committer, None, None, {'prov:role':'committer'})
+            doc.wasAssociatedWith(self.url, self.committer, None, None, {'prov:role':mapper.qname('http://purl.org/github2prov/committer')})
             doc.wasAssociatedWith(self.url, self.committer)
 
         for parent in self.parents:
@@ -288,11 +288,12 @@ renamed_title renamed
         # nodes and orphaning the originals
         event_url = mapper.qname(self.url)
 
-        doc.activity(event_url, self.created_at, self.created_at, other_attributes={'prov:type': mapper.qname('http://purl.org/github2prov/' + self.prov_sub_type())})
+        doc.activity(event_url, self.created_at, self.created_at,
+                     other_attributes={'prov:type': mapper.qname('http://purl.org/github2prov/' + self.prov_sub_type())})
 
         actor_url = mapper.qname(self.actor.url)
         doc.agent(actor_url)
-        doc.wasAssociatedWith(event_url, actor_url, other_attributes={'prov:role': 'github2prov:actor'})
+        doc.wasAssociatedWith(event_url, actor_url, other_attributes={'prov:role': mapper.qname('http://purl.org/github2prov/actor')})
         doc.wasAssociatedWith(event_url, actor_url)
 
         doc.entity(issue_version, {'prov:type': mapper.qname('http://purl.org/github2prov/issue_version')})
@@ -383,7 +384,7 @@ class EventWithEnabler(Event):
         event_url = mapper.qname(self.url)
 
         doc.agent(enabler_url)
-        doc.wasAssociatedWith(event_url, agent=enabler_url, other_attributes={'prov:role': 'github2prov:enabler'})
+        doc.wasAssociatedWith(event_url, agent=enabler_url, other_attributes={'prov:role': mapper.qname('http://purl.org/github2prov/enabler')})
 
 
 class AddedToProjectEvent(Event):
@@ -420,7 +421,7 @@ class AssignedEvent(Event):
         event_url = mapper.qname(self.url)
 
         doc.agent(assignee_url)
-        doc.wasAssociatedWith(event_url, agent=assignee_url, other_attributes={'prov:role': 'github2prov:assignee'})
+        doc.wasAssociatedWith(event_url, agent=assignee_url, other_attributes={'prov:role': mapper.qname('http://purl.org/github2prov/assignee')})
 
 
 class ClosedEvent(EventWithReason):
@@ -453,7 +454,7 @@ class CommentDeletedEvent(Event):
         event_url = mapper.qname(self.url)
 
         doc.agent(dca_url)
-        doc.wasAssociatedWith(event_url, agent=dca_url, other_attributes={'prov:role': 'github2prov:deletedCommentAuthor'})
+        doc.wasAssociatedWith(event_url, agent=dca_url, other_attributes={'prov:role': mapper.qname('http://purl.org/github2prov/deletedCommentAuthor')})
 
 
 class ConnectedEvent(Event):
@@ -829,7 +830,9 @@ class UserBlockedEvent(Event):
         event_url = mapper.qname(self.url)
 
         doc.agent(subject_url)
-        doc.wasAssociatedWith(event_url, agent=subject_url, other_attributes={'prov:role': 'github2prov:subject'})
+        doc.wasAssociatedWith(event_url,
+                              agent=subject_url,
+                              other_attributes={'prov:role': mapper.qname('http://purl.org/github2prov/subject')})
 
 
 
@@ -858,7 +861,8 @@ class AddedToMergeQueueEvent(Event):
         event_url = mapper.qname(self.url)
 
         doc.agent(enqueuer_url)
-        doc.wasAssociatedWith(event_url, agent=enqueuer_url, other_attributes={'prov:role': 'github2prov:enqueuer'})
+        doc.wasAssociatedWith(event_url, agent=enqueuer_url,
+                              other_attributes={'prov:role': mapper.qname('http://purl.org/github2prov/enqueuer')})
 
 class AutoMergeDisabledEvent(Event):
     def __init__(self, id: str, created_at: str, actor: User, reason: str, reason_code: int):
