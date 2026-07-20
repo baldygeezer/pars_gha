@@ -247,6 +247,7 @@ class Event:
         self.created_at = created_at
         self.actor = actor
         self.number = -1
+        self.url = None  # set later during converter.parse_event
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor})"
 
@@ -279,8 +280,13 @@ renamed_title renamed
 
     def prov(self, doc, mapper, issue_url):
         issue_version = mapper.qname(issue_url + '#' + str(self.number))
-        u = issue_url + "/events/" + self.id
-        event_url = mapper.qname(u)
+        # u = issue_url + "/events/" + self.id
+        # event_url = mapper.qname(u)
+
+        # bernard stwithch this to use self.url, like all the base classes. In some situations this was used to mint
+        # subjects and or objects for triples which generated new nodes which the triples pointed at, thus spitting some
+        # nodes and orphaning the originals
+        event_url = mapper.qname(self.url)
 
         doc.activity(event_url, self.created_at, self.created_at, other_attributes={'prov:type': mapper.qname('http://purl.org/github2prov/' + self.prov_sub_type())})
 
@@ -298,33 +304,34 @@ renamed_title renamed
         doc.used(event_url, ip)
         doc.wasGeneratedBy(issue_version, event_url)
 
-
-class EventWithUser:
-    def __init__(self, id: str, created_at: str, actor: User, user: User):
-        super().__init__(id, created_at, actor)
-        self.user = user
-
-    def __repr__(self):
-        return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, user={self.user})"
-
-    @classmethod
-    def fragment(cls):
-        return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} user {{ url login __typename }} }}"
-
-    @classmethod
-    def parse(cls, data):
-        return cls(id=data['id'], created_at=data['createdAt'],
-                   actor=User.parse(data['actor']),
-                   user=User.parse(data['user']))
-
-    def prov(self, doc, mapper, issue_url):
-        super().prov(doc, mapper, issue_url)
-
-        user_url = mapper.qname(self.user.url)
-        event_url = mapper.qname(self.url)
-
-        doc.agent(user_url)
-        doc.wasAssociatedWith(event_url, user_url, other_attributes={'prov:role': 'github2prov:user'})
+# leaving this here for now @todo check if this really is dead code
+# it was making linting errors and doesn't seem to be in use
+# class EventWithUser:
+#     def __init__(self, id: str, created_at: str, actor: User, user: User):
+#         super().__init__(id, created_at, actor)
+#         self.user = user
+#
+#     def __repr__(self):
+#         return f"{rn(self)}(id={self.id}, created_at={self.created_at}, actor={self.actor}, user={self.user})"
+#
+#     @classmethod
+#     def fragment(cls):
+#         return f"... on {cls.__name__} {{ id createdAt actor {{ url login __typename }} user {{ url login __typename }} }}"
+#
+#     @classmethod
+#     def parse(cls, data):
+#         return cls(id=data['id'], created_at=data['createdAt'],
+#                    actor=User.parse(data['actor']),
+#                    user=User.parse(data['user']))
+#
+#     def prov(self, doc, mapper, issue_url):
+#         super().prov(doc, mapper, issue_url)
+#
+#         user_url = mapper.qname(self.user.url)
+#         event_url = mapper.qname(self.url)
+#
+#         doc.agent(user_url)
+#         doc.wasAssociatedWith(event_url, user_url, other_attributes={'prov:role': 'github2prov:user'})
 
 class EventWithReason(Event):
     def __init__(self, id: str, created_at: str, actor: User, state_reason: str):
