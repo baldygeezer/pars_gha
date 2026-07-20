@@ -431,9 +431,9 @@ def releases_query(cursor: str | None = None) -> str:
             num_per_page - number of items per page
     """
     return f'''
-query repository_releases($owner: String!, $name: String!, $num_per_page: Int!) {{
+query repository_releases($owner: String!, $name: String!) {{
   repository(owner: $owner, name: $name) {{
-    releases(first: $num_per_page, {after} orderBy: {{field: CREATED_AT, direction: DESC}}) {{ edges {{
+    releases(first: 20, {after} orderBy: {{field: CREATED_AT, direction: DESC}}) {{ edges {{
         node {{
           id
           name
@@ -441,13 +441,14 @@ query repository_releases($owner: String!, $name: String!, $num_per_page: Int!) 
           author {{ url login __typename }}
           url
           tagCommit {{ commitUrl oid }}
-          releaseAssets(first: $num_per_page) {{
+          releaseAssets(first: 20) {{
             edges {{
               node {{
-                name
-                url
                 downloadCount
               }}
+            }}
+            pageInfo {{
+                hasNextPage
             }}
           }}
         }}

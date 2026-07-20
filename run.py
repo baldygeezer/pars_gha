@@ -2,6 +2,7 @@ import itertools
 import logging
 import time
 import typing
+import traceback
 
 import click
 from decouple import config
@@ -52,6 +53,8 @@ def cmd_crawl(
             time.sleep(0.5)
         except Exception as e:
            print(r, e)
+           # bernard wants a stacktrace 'cos he likes them
+           traceback.print_exc()
 
 @cli.command(name='convert')
 @click.argument('repo', nargs=-1)

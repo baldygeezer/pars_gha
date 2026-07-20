@@ -38,15 +38,23 @@ class GithubCommit:
         url = data['url']
         sha = data['sha']
 
+        # bernard changed this - the method was retireving athorship info from a top level filed that was used in the REST commit format
+        # with graphql results there is no top leve filed and the data is nested at cinutt.author.user or commit,comitter.user
+        # this means the author comitter info was alsways set to none so no assocation links were ever produced
+
         # Obtain authorship info if it exists
-        author_el = data.get('author', {})
+        author_el = data.get('commit', {}).get('author', {}).get('user') or {}
+        # author_el = data.get('author', {})
         author = author_el.get('url', None) if author_el else None
         author_name = data.get('commit', {}).get('author', {}).get('name', None)
 
         # Obtain committer info it exists
-        committer_el = data.get('committer', {})
+        committer_el = data.get('commit', {}).get('committer', {}).get('user') or {}
+
+        # committer_el = data.get('committer', {})
         committer = committer_el.get('url', None) if committer_el else None
         committer_name = data.get('commit', {}).get('committer', {}).get('name', None)
+
 
         # Created time used for both start and end PROV entries
         created_at = data.get('commit', {}).get('committer', {}).get('date', None)
@@ -1061,15 +1069,38 @@ class MergedEvent(Event):
 
 class PullRequestCommit:
     # url
-    def __init__(self, id: str, commit: Commit):
+    # Bernard added parse and prov methods and has registered this class so 
+    # that the converter.py can associate commits with PRs
+    def __init__(self, id: str, commit: Commit, created_at: str):
         self.id = id
         self.commit = commit
+        # Bernard added this to stop a crash in converter.py which accesses a created_at for sorting
+        # it used to skip this class
+        self.created_at=created_at
     def __repr__(self):
         return f"{rn(self)}(id={self.id}, commit={self.commit})"
 
     @classmethod
     def fragment(cls):
         return f"... on {cls.__name__} {{ id commit {{ commitUrl committedDate oid }} }} "
+
+    # Bernard added    
+    @classmethod
+    def parse(cls, data):
+        return cls(id=data['id'], commit=Commit.parse(data['commit']),
+                   created_at=data['commit']['committedDate'])  
+    # Bernard added     
+    def prov(self, doc, mapper, issue_url):
+        # create a wasInfluencedBy from pr to commit
+        pr_url = mapper.qname(issue_url)
+        commit_url = mapper.qname(self.commit.commit_url)
+        doc.activity(commit_url)# just in case there isn't one
+        doc.wasInfluencedBy(pr_url, commit_url)
+
+
+
+
+
 
 class PullRequestReview(Event):
     # databaseId
@@ -1203,6 +1234,7 @@ ConvertToDraftEvent, DeployedEvent, DeploymentEnvironmentChangedEvent,
 HeadRefDeletedEvent, HeadRefForcePushedEvent, HeadRefRestoredEvent,
 MergedEvent, PullRequestReview, PullRequestRevisionMarker,
 ReadyForReviewEvent, RemovedFromMergeQueueEvent, RemovedFromProjectEvent,
-ReviewDismissedEvent, ReviewRequestRemovedEvent, ReviewRequestedEvent
+ReviewDismissedEvent, ReviewRequestRemovedEvent, ReviewRequestedEvent,
+PullRequestCommit, # bernard added ths so converter/py can recognise it
 ]
 allEvents = { c.__name__: c for c in _allEvents }

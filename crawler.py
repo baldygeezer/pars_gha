@@ -93,9 +93,17 @@ def crawl(repo: str, endpoint: str, token: str, num_issues=50, num_events=250, n
             if hasattr(t, "load") and callable(getattr(t, "load")):
                 if hasattr(t, "filename"):
                     filename = f'{r.directory(base=directory)}/{t.filename}.json'
-                    with open(filename, 'r') as file:
-                        data = json.load(file)
-                        t.load(data)
+                    # bernard added a guard against file not found during recrawl
+                    try:
+                        with open(filename, 'r') as file:
+                            data = json.load(file)
+                            t.load(data)
+                    except FileNotFoundError:
+                        pass
+                    # with open(filename, 'r') as file:
+                    #     data = json.load(file)
+                    #     t.load(data)
+
                 elif hasattr(t, "glob"):
                     g = t.glob
                     d = r.directory(base=directory)
@@ -130,13 +138,22 @@ def crawl(repo: str, endpoint: str, token: str, num_issues=50, num_events=250, n
 
             data = resp.json()
             print("got", data)
+            # bernard changed this - stopped raising an exception (which gets swallowed and fails silently)
             if not validate(data):
                 logger.error(f'post response body failed to validate response for repo {repo}:\n{body}')
                 logger.error(f'post response body failed to validate response for repo {repo}:\n{data}')
                 errors = data["errors"]
+                error_types = [e['type'] for e in errors]
                 if "NOT_FOUND" in [e['type'] for e in errors]:
                     return
-                raise(Exception(f'failed to validate respose for repo {repo}: {data["errors"]}'))
+                if "RESOURCE_LIMITS_EXCEEDED" in error_types:
+                    print(f'{repo} RESOURCE_LIMITS_EXCEEDED')
+                    return        
+                    print(f'{repo} VALIDATION_FAILED {error_types}')
+                    return    
+
+                # bernard changed this  
+                # raise(Exception(f'failed to validate respose for repo {repo}: {data["errors"]}'))
 
         next_tasks = []
         if hasattr(t, "process") and callable(getattr(t, "process")):

@@ -1,3 +1,13 @@
 output/*
 !output/
 __pycache__
+err_log_*.txt
+long_repos/
+crawl_logs/
+convert_logs/
+err_log_*
+*.log
+*.json
+*.txt
+venv/
+.env

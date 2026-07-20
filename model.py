@@ -9,6 +9,10 @@ issue_persist = [ '__typename', 'id', 'databaseId', 'number', 'title', 'author',
 
 logger = logging.getLogger(__name__)
 
+# Bernard added a helper to guard against missing values (None)
+def extract_events(edges):
+    return [e['node'] for e in edges if e is not None and e.get('node') is not None]
+
 class IssuesEventsPage:
     def __init__(self, repo, issues):
         self.issues = issues
@@ -18,12 +22,25 @@ class IssuesEventsPage:
     def process(self, data, r):
         issues = data['data']['repository']
         for k, issue in issues.items():
+            # Bernard added this to stop a crash on encountering deleted (None) issues
+            if issue is None:
+                logger.warning(f'null node for key {k} in fill response for {self.repo.repo_name}, skipping')
+                print(f'null node skipped: {self.repo.repo_name} {k}')
+                continue
             num = issue['number']
             timeline = issue['timelineItems']
-            events = map(lambda x: x['node'], timeline['edges'])
+            # bernard added a guard against missing nodes (None)
+            # events = map(lambda x: x['node'], timeline['edges'])
+            events = extract_events(timeline['edges'])
+
             self.repo.issues[num].add_events(events)
             self.repo.issues[num].complete(not timeline['pageInfo']['hasNextPage'])
             self.repo.issues[num].cursor = timeline['pageInfo']['endCursor']
+        # bernard added    
+        still_incomplete = [i for i in self.issues if not i.isComplete()]
+        if still_incomplete:
+            return [IssuesEventsPage(self.repo, still_incomplete)]
+
         return []
 
 class Issues:
@@ -60,7 +77,9 @@ class Issues:
                 i.add_info(persist)
 
                 timeline = issue['timelineItems']
-                events = map(lambda x: x['node'], timeline['edges'])
+                # Bernard added a guard against None nodes
+                # events = map(lambda x: x['node'],  timeline['edges'])
+                events = extract_events(timeline['edges'])
                 i.add_events(events)
                 i.complete(not timeline['pageInfo']['hasNextPage'])
                 i.cursor = timeline['pageInfo']['endCursor']
@@ -91,7 +110,9 @@ class Issues:
             logger.debug(f'not complete {len(inc)} issues')
             fill = IssuesEventsPage(self.repo, [self.repo.issues[i] for i in inc])
             tasks.append(fill)
-            if not self.main_page:
+
+            # bernard changed this to kill the infinite loop 
+            if not self.main_page and data is not None:
                 tasks.append(self)
 
         if not completed:
@@ -111,12 +132,26 @@ class PullRequestsEventsPage:
     def process(self, data, r):
         prs = data['data']['repository']
         for k, issue in prs.items():
+            # Bernard added this to stop a crash on encountering deleted issues
+            if issue is None:
+                logger.warning(f'null node for key {k} in fill response for {self.repo.repo_name}, skipping')
+                print(f'null node skipped: {self.repo.repo_name} {k}')
+                continue
             num = issue['number']
             timeline = issue['timelineItems']
-            events = map(lambda x: x['node'], timeline['edges'])
+            # Bernard added a guard against None nodes
+            # events = map(lambda x: x['node'], timeline['edges'])
+            events = extract_events(timeline['edges'])
             self.repo.pull_requests[num].add_events(events)
             self.repo.pull_requests[num].complete(not timeline['pageInfo']['hasNextPage'])
             self.repo.pull_requests[num].cursor = timeline['pageInfo']['endCursor']
+        
+        # bernard added    
+        still_incomplete = [i for i in self.prs if not i.isComplete()]
+        if still_incomplete:
+            return [PullRequestsEventsPage(self.repo, still_incomplete)]
+
+
         return []
 
 class PullRequests:
@@ -154,7 +189,10 @@ class PullRequests:
                 p.add_info(persist)
 
                 timeline = pr['timelineItems']
-                events = map(lambda x: x['node'], timeline['edges'])
+                # Bernard added a guard agianst None nodes
+                # events = map(lambda x: x['node'],  timeline['edges'])
+                events = extract_events(timeline['edges'])
+
                 p.add_events(events)
                 p.complete(not timeline['pageInfo']['hasNextPage'])
                 p.cursor = timeline['pageInfo']['endCursor']
@@ -179,7 +217,10 @@ class PullRequests:
         else:
             self.cursor = None
             self.main_page = False
-            print("working out next step: no page", prs["pageInfo"], overlap_with_existing)
+            
+            # Bernard's change: add guard to stop a crash when data is None so prs not assigned
+            # print("working out next step: no page", prs["pageInfo"], overlap_with_existing)
+            print("working out next step: no page", prs["pageInfo"] if data else None, overlap_with_existing)
 
         inc = self.repo.incomplete_pull_requests()
         inc = [i for i in inc if not self.repo.pull_requests[i].existing]
@@ -188,8 +229,13 @@ class PullRequests:
             logger.debug(f'not complete {len(inc)} pull_requests')
             fill = PullRequestsEventsPage(self.repo, [self.repo.pull_requests[i] for i in inc])
             tasks.append(fill)
-            if not self.main_page:
+
+            # Bernard made an infinite loop and fixed it here!
+            if not self.main_page and data is not None:
                 tasks.append(self)
+
+            # if not self.main_page:
+            #     tasks.append(self)
 
         if not completed:
             completed = None
@@ -216,6 +262,9 @@ class Commits:
         entries = []
         for t in page['edges']:
             c = t['node']
+           
+            # Bernard's changes below to fix broken linkage between Agents and Commits
+            # userinfo was fetched by the graphql but not added to the commits.json
             commit = {
                 "url": c['commitUrl'],
                 "sha": c['oid'],
@@ -223,12 +272,17 @@ class Commits:
                     "author": {
                         "name": c['author']['name'],
                         "email": c['author']['email'],
-                        "date": c['authoredDate']
+                        "date": c['authoredDate'],
+                        # get a userid (.get() cos it can be none if the commit was via browser ui)
+                        "user":c['author'].get('user')
+
                     },
                     "committer": {
                         "name": c['committer']['name'],
                         "email": c['committer']['email'],
-                        "date": c['committedDate']
+                        "date": c['committedDate'],
+                        # get a userid (.get() cos it can be none if the commit was via browser ui)
+                        "user":c['committer'].get('user')
                     },
                     "message": c['message']
                 }
@@ -306,7 +360,18 @@ class Releases:
             dc = 0
             for rr in r['releaseAssets']['edges']:
                 dc = dc + rr['node']['downloadCount']
-            d['downloadCount'] = dc
+            
+            # bernard changed this. The release fragment is now capped at 20 releases per page to avoid hitting quotas, so...
+            # if there are more pages in the result we have more pages to go. we might hit the cap at this point
+            if r['releaseAssets']['pageInfo']['hasNextPage']:
+                # so we track the download count as a 'more-than' value because we havent seen every page and
+                 # don't know the actual value. If we hit the cap there will be more pages, so this is the final result
+                d['downloadCount'] = f"{dc}+"
+            
+            else:
+                # if we get here we saw all the pages and know what the real number is so use that
+                d['downloadCount'] = dc
+
             entries.append(d)
 
         abort = False

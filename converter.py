@@ -114,8 +114,11 @@ def add_prov_for_issue_or_pull_request(repo, doc, mapper, data):
 def parse_event(event_data, issue_url):
     """Parse a single event from the data."""
     event_type = event_data['__typename']
-    if event_type == "PullRequestCommit":
-        return None
+
+    # Bernard commented this out because we are now linking PRs to commits
+    # the PullRequestCommit class now has parse and prov methods, so we dont need to skip it
+    # if event_type == "PullRequestCommit":
+    #     return None
     ec = github.allEvents.get(event_type, None)
     if not ec:
         return None
