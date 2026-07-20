@@ -279,8 +279,13 @@ renamed_title renamed
 
     def prov(self, doc, mapper, issue_url):
         issue_version = mapper.qname(issue_url + '#' + str(self.number))
-        u = issue_url + "/events/" + self.id
-        event_url = mapper.qname(u)
+        # u = issue_url + "/events/" + self.id
+        # event_url = mapper.qname(u)
+
+        # bernard stwithch this to use self.url, like all the base classes. In some situations this was used to mint
+        # subjects and or objects for triples which generated new nodes which the triples pointed at, thus spitting some
+        # nodes and orphaning the originals
+        event_url = mapper.qname(self.url)
 
         doc.activity(event_url, self.created_at, self.created_at, other_attributes={'prov:type': mapper.qname('http://purl.org/github2prov/' + self.prov_sub_type())})
 
