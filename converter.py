@@ -5,7 +5,6 @@ import gzip
 import itertools
 from pathlib import Path
 
-import re
 
 from model import Repo
 
@@ -127,11 +126,17 @@ def parse_event(event_data, issue_url):
         u = event_data['url']
         e.url = u.replace('#event-', '/events/')
     else:
-        # prov python library is correctly output provn with qnames with the
-        # follow characters:
-        # "=" | "'" | "(" | ")" | "," | "-" | ":" | ";" | "[" | "]" | "."
-        i = re.sub(r'[=\'(),-:;\[\]]', '', e.id)
-        u = issue_url + '/events/' + i
+        # bernard changed this because it was causing url inconsistencies. There was a regex here that broke some nodes
+        # by splitting them into different uris, so that some triples were lost. it was also removing digits because
+        # ',-:' is a character range so it was also lossy and could potentially merge other nodes
+        # !NOTE: this means that we can no longer output PROV-N as the regex was removing prov-n illegal chars.
+        # @todo: look at using % encoding?
+        # the old regex:
+        # i = re.sub(r'[=\'(),-:;\[\]]', '', e.id)
+        # u = issue_url + '/events/' + i
+
+        # we now just use the node id as-is, This will be fine for turtle but will break prov-n output unless we $ encode
+        u = issue_url + '/events/' + e.id
         e.url  = u
     return e
 
