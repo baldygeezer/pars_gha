@@ -3,6 +3,9 @@
 This python tool will crawl a github repository and generate provenance. It generates
 provenance based on the issues, pull requests and commits that have been made.
 
+This version was used in the paper "Provenance Analysis of Contributor Roles in a Long-Term Research Software Project"
+It has had some bug fixes. NB this version cannot be used to serialise to PROV-N format
+
 It uses GitHub's graphql api. In contrast to other crawlers, it attempts to minimise
 the number of queries that have to be made so as not to run a foul of the rate limit.
 It does this by:
